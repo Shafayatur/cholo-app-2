@@ -32,8 +32,13 @@ model User {
   email           String           @unique
   password        String?
   role            Role             @default(PASSENGER)
-  rides           Ride[]
+
+  rides           Ride[]           // driver side relation
+
   bookingRequests BookingRequest[] @relation("PassengerBookings")
+
+  seatBookings    SeatBooking[]    // ✅ FIX: added back relation
+
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 }
@@ -55,23 +60,44 @@ model Ride {
   departureTime    DateTime
   seats            Int              @default(4)
   status           RideStatus       @default(PLANNED)
+
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
   driver           User             @relation(fields: [driverId], references: [id])
+
   bookingRequests  BookingRequest[]
+
+  seatBookings     SeatBooking[]    // ✅ FIX: added back relation
 }
 
 model BookingRequest {
   id          Int           @id @default(autoincrement())
-  rideId       Int
-  passengerId  Int
-  status       BookingStatus @default(PENDING)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  rideId      Int
+  passengerId Int
+  status      BookingStatus @default(PENDING)
 
-  ride         Ride          @relation(fields: [rideId], references: [id])
-  passenger     User          @relation("PassengerBookings", fields: [passengerId], references: [id])
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  ride        Ride          @relation(fields: [rideId], references: [id])
+
+  passenger   User          @relation("PassengerBookings", fields: [passengerId], references: [id])
 
   @@unique([rideId, passengerId])
+}
+
+model SeatBooking {
+  id        Int      @id @default(autoincrement())
+  rideId    Int
+  userId    Int
+  seatNo    Int
+
+  createdAt DateTime @default(now())
+
+  ride      Ride     @relation(fields: [rideId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([rideId, seatNo])
+ 
 }

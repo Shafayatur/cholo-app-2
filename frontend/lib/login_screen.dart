@@ -5,6 +5,7 @@ import 'admin_panel.dart';
 import 'backend_config.dart';
 import 'driver_panel.dart';
 import 'user_panel.dart';
+import 'session.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -51,6 +52,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        Session.userId = data["user"]["id"];
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Welcome ${data['user']['name']}!')),
         );
