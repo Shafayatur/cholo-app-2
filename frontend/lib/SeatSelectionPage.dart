@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'session.dart';
 
-import 'src/backend_config_io.dart'
-    if (dart.library.html) 'src/backend_config_web.dart';
+import 'session.dart';
+import 'backend_config.dart';
 
 class SeatSelectionPage extends StatefulWidget {
   final int rideId;
@@ -16,10 +15,12 @@ class SeatSelectionPage extends StatefulWidget {
 }
 
 class _SeatSelectionPageState extends State<SeatSelectionPage> {
-  int? selectedSeat;
-
+  final Set<int> selectedSeats = {};
   int totalSeats = 0;
   List<int> bookedSeats = [];
+  List<int> myBookedSeats = [];
+  bool isLoading = false;
+  bool isConfirming = false;
 
   @override
   void initState() {
@@ -28,55 +29,110 @@ class _SeatSelectionPageState extends State<SeatSelectionPage> {
   }
 
   Future<void> fetchSeats() async {
+    if (!mounted) return;
+    setState(() => isLoading = true);
     try {
-      final url = "${backendUrlImpl()}/seat-booking/${widget.rideId}/seats";
-      print("Calling: $url");
+      final userIdQuery = Session.userId != null
+          ? "?userId=${Session.userId}"
+          : "";
+      final url = "$backendUrl/seat-booking/${widget.rideId}/seats$userIdQuery";
 
       final res = await http.get(Uri.parse(url));
-
-      print("Status: ${res.statusCode}");
-      print("Body: ${res.body}");
-
       final data = jsonDecode(res.body);
 
       setState(() {
         totalSeats = data["totalSeats"];
         bookedSeats = List<int>.from(data["bookedSeats"]);
+        myBookedSeats = List<int>.from(data["myBookedSeats"] ?? []);
+        selectedSeats.removeWhere((seat) => bookedSeats.contains(seat));
       });
     } catch (e) {
-      print("Error fetching seats: $e");
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error fetching seats: $e")));
+    } finally {
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
     }
   }
 
-  Future<void> bookSeat() async {
+  void onSeatTapped(int seatNo) {
+    if (bookedSeats.contains(seatNo) || myBookedSeats.isNotEmpty) return;
+    setState(() {
+      if (selectedSeats.contains(seatNo)) {
+        selectedSeats.remove(seatNo);
+      } else {
+        selectedSeats.add(seatNo);
+      }
+    });
+  }
+
+  Future<void> confirmBooking() async {
+    if (Session.userId == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Please login first")));
+      return;
+    }
+
+    if (myBookedSeats.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Booking already confirmed for this ride"),
+        ),
+      );
+      return;
+    }
+
+    if (selectedSeats.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Select at least one seat")));
+      return;
+    }
+
+    setState(() => isConfirming = true);
     try {
       final res = await http.post(
-        Uri.parse("${backendUrlImpl()}/seat-booking"),
+        Uri.parse("$backendUrl/seat-booking"),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           "rideId": widget.rideId,
-          "userId": Session.userId, // temporary (replace later with auth user)
-          "seatNo": selectedSeat,
+          "userId": Session.userId,
+          "seats": selectedSeats.toList()..sort(),
         }),
       );
 
-      if (res.statusCode == 200 || res.statusCode == 201) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Seat $selectedSeat booked")));
+      final body = jsonDecode(res.body);
+
+      if (res.statusCode == 201) {
+        final bookedNow = List<int>.from(body["seats"] ?? []);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Seats ${bookedNow.join(", ")} booked")),
+        );
 
         setState(() {
-          selectedSeat = null;
+          selectedSeats.clear();
         });
 
-        fetchSeats(); // refresh seat map
+        await fetchSeats();
       } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Booking failed")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(body["error"]?.toString() ?? "Booking failed"),
+          ),
+        );
       }
     } catch (e) {
-      print("Error booking seat: $e");
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error booking seats: $e")));
+    } finally {
+      if (mounted) {
+        setState(() => isConfirming = false);
+      }
     }
   }
 
@@ -93,72 +149,131 @@ class _SeatSelectionPageState extends State<SeatSelectionPage> {
 
           Text(
             "Ride ID: ${widget.rideId}",
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            style: const TextStyle(fontWeight: FontWeight.bold),
           ),
 
           const SizedBox(height: 20),
 
-          Expanded(
-            child: Center(
-              child: totalSeats == 0
-                  ? const CircularProgressIndicator()
-                  : Wrap(
-                      spacing: 20,
-                      runSpacing: 20,
-                      children: List.generate(totalSeats, (index) {
-                        int seatNo = index + 1;
-
-                        bool isBooked = bookedSeats.contains(seatNo);
-                        bool isSelected = selectedSeat == seatNo;
-
-                        return GestureDetector(
-                          onTap: isBooked
-                              ? null
-                              : () {
-                                  setState(() {
-                                    selectedSeat = seatNo;
-                                  });
-                                },
-                          child: Container(
-                            width: 60,
-                            height: 60,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: isBooked
-                                  ? Colors.blue
-                                  : isSelected
-                                  ? Colors.orange
-                                  : Colors.grey.shade300,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Text(
-                              "$seatNo",
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                        );
-                      }),
-                    ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: const [
+                _SeatLegend(color: Color(0xFFE5E7EB), label: "Available"),
+                SizedBox(width: 10),
+                _SeatLegend(color: Color(0xFFF98825), label: "Selected"),
+                SizedBox(width: 10),
+                _SeatLegend(color: Color(0xFF3B82F6), label: "Booked"),
+              ],
             ),
           ),
 
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFF98825),
-                minimumSize: const Size(double.infinity, 50),
+          if (myBookedSeats.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Text(
+                "Booked by you: ${myBookedSeats.join(", ")} (locked)",
+                style: const TextStyle(
+                  color: Colors.green,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-              onPressed: selectedSeat == null ? null : bookSeat,
-              child: const Text("Confirm Booking"),
+            ),
+
+          Expanded(
+            child: isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : totalSeats == 0
+                ? const Center(child: Text("No seats available"))
+                : GridView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    itemCount: totalSeats,
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 4,
+                          mainAxisSpacing: 12,
+                          crossAxisSpacing: 12,
+                          childAspectRatio: 1,
+                        ),
+                    itemBuilder: (_, index) {
+                      final seatNo = index + 1;
+                      final isBooked = bookedSeats.contains(seatNo);
+                      final isSelected = selectedSeats.contains(seatNo);
+
+                      Color color;
+                      if (isBooked) {
+                        color = const Color(0xFF3B82F6);
+                      } else if (isSelected) {
+                        color = const Color(0xFFF98825);
+                      } else {
+                        color = const Color(0xFFE5E7EB);
+                      }
+
+                      return GestureDetector(
+                        onTap: () => onSeatTapped(seatNo),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: color,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            "$seatNo",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: isBooked || isSelected
+                                  ? Colors.white
+                                  : Colors.black87,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: ElevatedButton(
+              onPressed:
+                  (selectedSeats.isEmpty ||
+                      myBookedSeats.isNotEmpty ||
+                      isConfirming)
+                  ? null
+                  : confirmBooking,
+              child: isConfirming
+                  ? const CircularProgressIndicator()
+                  : const Text("Confirm Booking"),
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _SeatLegend extends StatelessWidget {
+  final Color color;
+  final String label;
+
+  const _SeatLegend({required this.color, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 14,
+          height: 14,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(4),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(label),
+      ],
     );
   }
 }

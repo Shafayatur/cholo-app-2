@@ -4,6 +4,8 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'backend_config.dart';
+import 'ride_details_page.dart';
+import 'my_rides_page_driver.dart'; 
 
 class DriverPanel extends StatefulWidget {
   const DriverPanel({Key? key}) : super(key: key);
@@ -306,7 +308,7 @@ class _DriverPanelState extends State<DriverPanel> {
 
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(
+            appBar: AppBar(
         backgroundColor: brandOrange,
         title: const Text(
           'Driver Panel',
@@ -315,6 +317,17 @@ class _DriverPanelState extends State<DriverPanel> {
         centerTitle: true,
         elevation: 0,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.list),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>  MyRidesPageDriver(),
+                ),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () => Navigator.of(context).pop(),
@@ -469,6 +482,33 @@ class _DriverPanelState extends State<DriverPanel> {
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 10),
+
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => RideDetailsPage(
+                              ride: {
+                                "id": rideId,
+                                "origin": originController.text,
+                                "destination": destinationController.text,
+                                "routeDistanceKm": routeDistanceKm,
+                                "routeDurationMin": routeDurationMin,
+                                "departureTime": departureController.text,
+                                "seats": seatsController.text,
+                                "status": rideStatus,
+                              },
+                            ),
+                          ),
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                      ),
+                      child: const Text("View Ride Details"),
                     ),
                     const SizedBox(height: 16),
                     ElevatedButton(
