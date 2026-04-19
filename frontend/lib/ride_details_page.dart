@@ -1,6 +1,9 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
 import 'dart:convert';
+
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+
 import 'backend_config.dart';
 
 class RideDetailsPage extends StatefulWidget {
@@ -16,6 +19,8 @@ class _RideDetailsPageState extends State<RideDetailsPage> {
   bool isLoading = false;
   int totalSeats = 0;
   List<Map<String, dynamic>> seats = [];
+  double totalFare = 0.0;
+  Timer? _seatPoll;
 
   int? get rideId => widget.ride["id"] is int
       ? widget.ride["id"] as int
@@ -25,11 +30,20 @@ class _RideDetailsPageState extends State<RideDetailsPage> {
   void initState() {
     super.initState();
     fetchSeatStatus();
+    _seatPoll = Timer.periodic(const Duration(seconds: 12), (_) {
+      if (mounted) fetchSeatStatus(silent: true);
+    });
   }
 
-  Future<void> fetchSeatStatus() async {
+  @override
+  void dispose() {
+    _seatPoll?.cancel();
+    super.dispose();
+  }
+
+  Future<void> fetchSeatStatus({bool silent = false}) async {
     if (rideId == null) return;
-    setState(() => isLoading = true);
+    if (!silent) setState(() => isLoading = true);
     try {
       final response = await http.get(
         Uri.parse("$backendUrl/seat-booking/$rideId/seats"),
@@ -38,14 +52,20 @@ class _RideDetailsPageState extends State<RideDetailsPage> {
       setState(() {
         totalSeats = data["totalSeats"] ?? 0;
         seats = List<Map<String, dynamic>>.from(data["seats"] ?? []);
+        final tf = data["totalFare"];
+        if (tf != null) {
+          totalFare = tf is num ? tf.toDouble() : double.tryParse(tf.toString()) ?? 0;
+        }
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Failed to load seat status: $e")));
+      if (!silent) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Failed to load seat status: $e")),
+        );
+      }
     } finally {
-      if (mounted) setState(() => isLoading = false);
+      if (mounted && !silent) setState(() => isLoading = false);
     }
   }
 
@@ -63,6 +83,10 @@ class _RideDetailsPageState extends State<RideDetailsPage> {
             Text("Name: ${passenger["name"] ?? "N/A"}"),
             Text("Email: ${passenger["email"] ?? "N/A"}"),
             Text("Passenger ID: ${passenger["id"] ?? "N/A"}"),
+            if (seatData["fare"] != null)
+              Text(
+                "Seat fare: ${(seatData["fare"] is num ? (seatData["fare"] as num).toDouble() : double.tryParse(seatData["fare"].toString()) ?? 0).toStringAsFixed(2)} Taka",
+              ),
           ],
         ),
         actions: [
@@ -97,25 +121,18 @@ class _RideDetailsPageState extends State<RideDetailsPage> {
               children: [
                 Text("Ride ID: ${widget.ride['id']}"),
                 const SizedBox(height: 10),
-
                 Text("Origin: ${widget.ride['origin']}"),
                 Text("Destination: ${widget.ride['destination']}"),
-
                 const SizedBox(height: 10),
-
                 Text("Distance: ${widget.ride['routeDistanceKm']} km"),
                 Text("Duration: ${widget.ride['routeDurationMin']} min"),
-
                 const SizedBox(height: 10),
-
                 Text("Departure: ${widget.ride['departureTime']}"),
                 Text("Seats: ${widget.ride['seats']}"),
-
                 const SizedBox(height: 10),
-
                 Text("Status: ${widget.ride['status']}"),
                 const SizedBox(height: 20),
-                const Text(
+                Text(
                   "Seat Status",
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
@@ -173,6 +190,11 @@ class _RideDetailsPageState extends State<RideDetailsPage> {
                       );
                     },
                   ),
+                const SizedBox(height: 20),
+                Text(
+                  "Total Fare: ${totalFare.toStringAsFixed(2)} Taka",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
               ],
             ),
           ],

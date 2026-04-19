@@ -21,6 +21,7 @@ class _SeatSelectionPageState extends State<SeatSelectionPage> {
   List<int> myBookedSeats = [];
   bool isLoading = false;
   bool isConfirming = false;
+  double? unitPassengerFare;
 
   @override
   void initState() {
@@ -40,11 +41,15 @@ class _SeatSelectionPageState extends State<SeatSelectionPage> {
       final res = await http.get(Uri.parse(url));
       final data = jsonDecode(res.body);
 
+      final u = data["unitPassengerFare"];
       setState(() {
         totalSeats = data["totalSeats"];
         bookedSeats = List<int>.from(data["bookedSeats"]);
         myBookedSeats = List<int>.from(data["myBookedSeats"] ?? []);
         selectedSeats.removeWhere((seat) => bookedSeats.contains(seat));
+        unitPassengerFare = u == null
+            ? null
+            : (u is num ? u.toDouble() : double.tryParse(u.toString()));
       });
     } catch (e) {
       if (!mounted) return;
@@ -109,8 +114,12 @@ class _SeatSelectionPageState extends State<SeatSelectionPage> {
 
       if (res.statusCode == 201) {
         final bookedNow = List<int>.from(body["seats"] ?? []);
+        final paid = body["bookingTotal"];
+        final msg = paid != null
+            ? "Seats ${bookedNow.join(", ")} booked — ${paid.toString()} Taka total"
+            : "Seats ${bookedNow.join(", ")} booked";
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Seats ${bookedNow.join(", ")} booked")),
+          SnackBar(content: Text(msg)),
         );
 
         setState(() {
@@ -150,6 +159,24 @@ class _SeatSelectionPageState extends State<SeatSelectionPage> {
           Text(
             "Ride ID: ${widget.rideId}",
             style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+
+          const SizedBox(height: 8),
+
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              unitPassengerFare == null
+                  ? "Fare estimate unavailable (check ride distance data)."
+                  : selectedSeats.isEmpty
+                  ? "Per-seat fare (full route for now): ${unitPassengerFare!.toStringAsFixed(2)} Taka — select seats"
+                  : "Estimated payable: ${(unitPassengerFare! * selectedSeats.length).toStringAsFixed(2)} Taka (${selectedSeats.length} × ${unitPassengerFare!.toStringAsFixed(2)})",
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                color: unitPassengerFare == null ? Colors.red.shade700 : Colors.black87,
+              ),
+            ),
           ),
 
           const SizedBox(height: 20),

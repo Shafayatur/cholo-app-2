@@ -1,13 +1,19 @@
 const express = require("express");
 const router = express.Router();
-const prisma = require("../../prisma/client");
+const prisma = require("../lib/prisma");
+const {
+  passengerFareForRide,
+  billableDistanceKmForRide,
+  RATE_PER_KM,
+  MIN_TRIP_KM,
+} = require("../lib/fare");
+const socketHub = require("../lib/socketHub");
 
 const parseSeatNumbers = (input) => {
   if (!Array.isArray(input)) return [];
   return [...new Set(input.map((value) => Number(value)).filter(Number.isInteger))];
 };
 
-// GET seats with ownership details
 router.get("/:rideId/seats", async (req, res) => {
   const rideId = Number(req.params.rideId);
   const userId = req.query.userId ? Number(req.query.userId) : null;
@@ -19,11 +25,30 @@ router.get("/:rideId/seats", async (req, res) => {
   try {
     const ride = await prisma.ride.findUnique({
       where: { id: rideId },
-      select: { seats: true },
+      select: {
+        seats: true,
+        totalFare: true,
+        originLat: true,
+        originLng: true,
+        destinationLat: true,
+        destinationLng: true,
+        routeDistanceKm: true,
+      },
     });
 
     if (!ride) {
       return res.status(404).json({ error: "Ride not found" });
+    }
+
+    let unitPassengerFare = null;
+    let billableDistanceKm = null;
+    try {
+      unitPassengerFare = passengerFareForRide(ride);
+      billableDistanceKm = billableDistanceKmForRide(ride);
+    } catch (e) {
+      if (e.code !== "NO_DISTANCE_FOR_FARE") {
+        throw e;
+      }
     }
 
     const bookings = await prisma.seatBooking.findMany({
@@ -51,6 +76,7 @@ router.get("/:rideId/seats", async (req, res) => {
           state: "AVAILABLE",
           isMine: false,
           passenger: null,
+          fare: null,
         };
       }
 
@@ -58,6 +84,7 @@ router.get("/:rideId/seats", async (req, res) => {
         seatNo,
         state: isMine ? "BOOKED_BY_ME" : "BOOKED",
         isMine,
+        fare: booking.fare,
         passenger: {
           id: booking.user.id,
           name: booking.user.name,
@@ -68,6 +95,11 @@ router.get("/:rideId/seats", async (req, res) => {
 
     res.json({
       totalSeats: ride.seats,
+      totalFare: ride.totalFare,
+      unitPassengerFare,
+      billableDistanceKm,
+      fareRatePerKm: RATE_PER_KM,
+      minBillableKm: MIN_TRIP_KM,
       seats,
       bookedSeats: bookings.map((booking) => booking.seatNo),
       myBookedSeats: userId
@@ -80,7 +112,6 @@ router.get("/:rideId/seats", async (req, res) => {
   }
 });
 
-// BOOK one or many seats atomically
 router.post("/", async (req, res) => {
   const rideId = Number(req.body.rideId);
   const userId = Number(req.body.userId);
@@ -95,10 +126,18 @@ router.post("/", async (req, res) => {
   }
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
+    const payload = await prisma.$transaction(async (tx) => {
       const ride = await tx.ride.findUnique({
         where: { id: rideId },
-        select: { id: true, seats: true },
+        select: {
+          id: true,
+          seats: true,
+          originLat: true,
+          originLng: true,
+          destinationLat: true,
+          destinationLng: true,
+          routeDistanceKm: true,
+        },
       });
 
       if (!ride) {
@@ -133,16 +172,55 @@ router.post("/", async (req, res) => {
         throw conflictError;
       }
 
+      let unitFare;
+      try {
+        unitFare = passengerFareForRide(ride);
+      } catch (e) {
+        if (e.code === "NO_DISTANCE_FOR_FARE") {
+          const wrapped = new Error("NO_DISTANCE_FOR_FARE");
+          throw wrapped;
+        }
+        throw e;
+      }
+
+      const bookingTotal = unitFare * seatNumbers.length;
+
       await tx.seatBooking.createMany({
-        data: seatNumbers.map((seatNo) => ({ rideId, userId, seatNo })),
+        data: seatNumbers.map((seatNo) => ({
+          rideId,
+          userId,
+          seatNo,
+          fare: unitFare,
+        })),
       });
 
-      return seatNumbers;
+      const updatedRide = await tx.ride.update({
+        where: { id: rideId },
+        data: {
+          totalFare: { increment: bookingTotal },
+        },
+        select: { totalFare: true },
+      });
+
+      return {
+        seats: seatNumbers,
+        unitFare,
+        bookingTotal,
+        rideTotalFare: updatedRide.totalFare,
+      };
+    });
+
+    socketHub.emitFareUpdate({
+      rideId,
+      totalFare: payload.rideTotalFare,
     });
 
     res.status(201).json({
       message: "Seat booking confirmed",
-      seats: result,
+      seats: payload.seats,
+      unitFare: payload.unitFare,
+      bookingTotal: payload.bookingTotal,
+      rideTotalFare: payload.rideTotalFare,
     });
   } catch (e) {
     if (e.message === "RIDE_NOT_FOUND") {
@@ -160,6 +238,12 @@ router.post("/", async (req, res) => {
       return res.status(409).json({
         error: "One or more selected seats are already booked",
         seats: e.conflictSeatNos ?? [],
+      });
+    }
+    if (e.message === "NO_DISTANCE_FOR_FARE") {
+      return res.status(400).json({
+        error:
+          "Ride has no usable distance data (coordinates or route distance). Cannot compute fare.",
       });
     }
     console.error(e);

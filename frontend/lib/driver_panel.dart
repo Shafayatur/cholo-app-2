@@ -43,6 +43,27 @@ class _DriverPanelState extends State<DriverPanel> {
   bool get canShowCreate => rideId == null;
   bool get canShowPlannedActions => rideId != null && rideStatus == "PLANNED";
 
+  /// Mirrors backend `FARE_RATE_PER_KM` / `FARE_MIN_TRIP_KM` defaults.
+  static const double _fareRatePerKm = 10;
+  static const double _minBillableKm = 1;
+  double minEstimatedFare = 0;
+  double maxEstimatedFare = 0;
+
+  void _applyFareEstimatesForCurrentRoute() {
+    if (routeDistanceKm == null) {
+      minEstimatedFare = 0;
+      maxEstimatedFare = 0;
+      return;
+    }
+    final seatCount = int.tryParse(seatsController.text.trim()) ?? 4;
+    final billableKm = routeDistanceKm! < _minBillableKm
+        ? _minBillableKm
+        : routeDistanceKm!;
+    final unitPassenger = billableKm * _fareRatePerKm;
+    maxEstimatedFare = unitPassenger * seatCount;
+    minEstimatedFare = _minBillableKm * _fareRatePerKm;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -93,6 +114,7 @@ class _DriverPanelState extends State<DriverPanel> {
               .toList();
           routeDistanceKm = summary[0] / 1000;
           routeDurationMin = summary[1] / 60;
+          _applyFareEstimatesForCurrentRoute();
         });
       }
     } catch (e) {
@@ -439,6 +461,8 @@ class _DriverPanelState extends State<DriverPanel> {
                         border: OutlineInputBorder(),
                       ),
                       keyboardType: TextInputType.number,
+                      onChanged: (_) =>
+                          setState(() => _applyFareEstimatesForCurrentRoute()),
                     ),
                     const SizedBox(height: 16),
                     if (routeDistanceKm != null && routeDurationMin != null)
@@ -446,6 +470,17 @@ class _DriverPanelState extends State<DriverPanel> {
                         'Distance: ${routeDistanceKm!.toStringAsFixed(1)} km, Duration: ${routeDurationMin!.toStringAsFixed(0)} min',
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
+                    if (routeDistanceKm != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Est. minimum total (one seat × ${_minBillableKm.toStringAsFixed(0)} km floor): ${minEstimatedFare.toStringAsFixed(2)} Taka',
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                      Text(
+                        'Est. maximum total (all seats × full route, per seat): ${maxEstimatedFare.toStringAsFixed(2)} Taka',
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ],
                     const SizedBox(height: 16),
                     if (canShowCreate)
                       ElevatedButton(
