@@ -70,7 +70,8 @@ function passengerFareForRide(ride) {
     err.code = "NO_DISTANCE_FOR_FARE";
     throw err;
   }
-  return billable * RATE_PER_KM;
+  // Always charge whole currency units, rounded up.
+  return Math.ceil(billable * RATE_PER_KM);
 }
 
 module.exports = {

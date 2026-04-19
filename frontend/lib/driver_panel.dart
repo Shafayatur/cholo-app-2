@@ -46,8 +46,8 @@ class _DriverPanelState extends State<DriverPanel> {
   /// Mirrors backend `FARE_RATE_PER_KM` / `FARE_MIN_TRIP_KM` defaults.
   static const double _fareRatePerKm = 10;
   static const double _minBillableKm = 1;
-  double minEstimatedFare = 0;
-  double maxEstimatedFare = 0;
+  int minEstimatedFare = 0;
+  int maxEstimatedFare = 0;
 
   void _applyFareEstimatesForCurrentRoute() {
     if (routeDistanceKm == null) {
@@ -56,12 +56,17 @@ class _DriverPanelState extends State<DriverPanel> {
       return;
     }
     final seatCount = int.tryParse(seatsController.text.trim()) ?? 4;
+    if (seatCount <= 0) {
+      minEstimatedFare = 0;
+      maxEstimatedFare = 0;
+      return;
+    }
     final billableKm = routeDistanceKm! < _minBillableKm
         ? _minBillableKm
         : routeDistanceKm!;
     final unitPassenger = billableKm * _fareRatePerKm;
-    maxEstimatedFare = unitPassenger * seatCount;
-    minEstimatedFare = _minBillableKm * _fareRatePerKm;
+    maxEstimatedFare = (unitPassenger * seatCount).ceil();
+    minEstimatedFare = (_minBillableKm * _fareRatePerKm).ceil();
   }
 
   @override
@@ -112,8 +117,8 @@ class _DriverPanelState extends State<DriverPanel> {
           routePoints = coordinates
               .map<LatLng>((coord) => LatLng(coord[1], coord[0]))
               .toList();
-          routeDistanceKm = summary[0] / 1000;
-          routeDurationMin = summary[1] / 60;
+          routeDistanceKm = summary['distance'] / 1000;
+          routeDurationMin = summary['duration'] / 60;
           _applyFareEstimatesForCurrentRoute();
         });
       }
@@ -473,11 +478,11 @@ class _DriverPanelState extends State<DriverPanel> {
                     if (routeDistanceKm != null) ...[
                       const SizedBox(height: 8),
                       Text(
-                        'Est. minimum total (one seat × ${_minBillableKm.toStringAsFixed(0)} km floor): ${minEstimatedFare.toStringAsFixed(2)} Taka',
+                        'Est. minimum total (one seat × ${_minBillableKm.toStringAsFixed(0)} km floor): $minEstimatedFare Taka',
                         style: const TextStyle(fontSize: 13),
                       ),
                       Text(
-                        'Est. maximum total (all seats × full route, per seat): ${maxEstimatedFare.toStringAsFixed(2)} Taka',
+                        'Est. maximum total (all seats × full route, per seat): $maxEstimatedFare Taka',
                         style: const TextStyle(fontSize: 13),
                       ),
                     ],

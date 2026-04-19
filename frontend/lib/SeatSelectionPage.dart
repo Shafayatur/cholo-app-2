@@ -21,7 +21,7 @@ class _SeatSelectionPageState extends State<SeatSelectionPage> {
   List<int> myBookedSeats = [];
   bool isLoading = false;
   bool isConfirming = false;
-  double? unitPassengerFare;
+  int? unitPassengerFare;
 
   @override
   void initState() {
@@ -49,7 +49,7 @@ class _SeatSelectionPageState extends State<SeatSelectionPage> {
         selectedSeats.removeWhere((seat) => bookedSeats.contains(seat));
         unitPassengerFare = u == null
             ? null
-            : (u is num ? u.toDouble() : double.tryParse(u.toString()));
+            : (u is num ? u.ceil() : int.tryParse(u.toString()));
       });
     } catch (e) {
       if (!mounted) return;
@@ -115,8 +115,11 @@ class _SeatSelectionPageState extends State<SeatSelectionPage> {
       if (res.statusCode == 201) {
         final bookedNow = List<int>.from(body["seats"] ?? []);
         final paid = body["bookingTotal"];
+        final paidInt = paid == null
+            ? null
+            : (paid is num ? paid.ceil() : int.tryParse(paid.toString()));
         final msg = paid != null
-            ? "Seats ${bookedNow.join(", ")} booked — ${paid.toString()} Taka total"
+            ? "Seats ${bookedNow.join(", ")} booked — $paidInt Taka total"
             : "Seats ${bookedNow.join(", ")} booked";
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(msg)),
@@ -169,8 +172,8 @@ class _SeatSelectionPageState extends State<SeatSelectionPage> {
               unitPassengerFare == null
                   ? "Fare estimate unavailable (check ride distance data)."
                   : selectedSeats.isEmpty
-                  ? "Per-seat fare (full route for now): ${unitPassengerFare!.toStringAsFixed(2)} Taka — select seats"
-                  : "Estimated payable: ${(unitPassengerFare! * selectedSeats.length).toStringAsFixed(2)} Taka (${selectedSeats.length} × ${unitPassengerFare!.toStringAsFixed(2)})",
+                  ? "Per-seat fare (full route for now): ${unitPassengerFare!} Taka — select seats"
+                  : "Estimated payable: ${unitPassengerFare! * selectedSeats.length} Taka (${selectedSeats.length} × $unitPassengerFare)",
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13,

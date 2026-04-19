@@ -19,7 +19,7 @@ class _RideDetailsPageState extends State<RideDetailsPage> {
   bool isLoading = false;
   int totalSeats = 0;
   List<Map<String, dynamic>> seats = [];
-  double totalFare = 0.0;
+  int totalFare = 0;
   Timer? _seatPoll;
 
   int? get rideId => widget.ride["id"] is int
@@ -54,7 +54,7 @@ class _RideDetailsPageState extends State<RideDetailsPage> {
         seats = List<Map<String, dynamic>>.from(data["seats"] ?? []);
         final tf = data["totalFare"];
         if (tf != null) {
-          totalFare = tf is num ? tf.toDouble() : double.tryParse(tf.toString()) ?? 0;
+          totalFare = tf is num ? tf.ceil() : int.tryParse(tf.toString()) ?? 0;
         }
       });
     } catch (e) {
@@ -192,7 +192,7 @@ class _RideDetailsPageState extends State<RideDetailsPage> {
                   ),
                 const SizedBox(height: 20),
                 Text(
-                  "Total Fare: ${totalFare.toStringAsFixed(2)} Taka",
+                  "Total Fare: $totalFare Taka",
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
               ],
