@@ -74,6 +74,44 @@ function passengerFareForRide(ride) {
   return Math.ceil(billable * RATE_PER_KM);
 }
 
+function estimateRideFareRange({ routeDistanceKm, seats }) {
+  const distance = Number(routeDistanceKm);
+  const seatCount = Number(seats);
+
+  if (!Number.isFinite(distance) || distance <= 0) {
+    return {
+      hasRoute: false,
+      unitPassengerFare: 0,
+      minFare: 0,
+      maxFare: 0,
+      billableDistanceKm: 0,
+    };
+  }
+
+  if (!Number.isFinite(seatCount) || seatCount <= 0) {
+    return {
+      hasRoute: true,
+      unitPassengerFare: 0,
+      minFare: 0,
+      maxFare: 0,
+      billableDistanceKm: Math.max(MIN_TRIP_KM, distance),
+    };
+  }
+
+  const billableDistanceKm = Math.max(MIN_TRIP_KM, distance);
+  const unitPassengerFare = Math.ceil(billableDistanceKm * RATE_PER_KM);
+  const minFare = Math.ceil(MIN_TRIP_KM * RATE_PER_KM);
+  const maxFare = unitPassengerFare * Math.ceil(seatCount);
+
+  return {
+    hasRoute: true,
+    unitPassengerFare,
+    minFare,
+    maxFare,
+    billableDistanceKm,
+  };
+}
+
 module.exports = {
   RATE_PER_KM,
   MIN_TRIP_KM,
@@ -81,4 +119,5 @@ module.exports = {
   rawDistanceKmForRide,
   billableDistanceKmForRide,
   passengerFareForRide,
+  estimateRideFareRange,
 };

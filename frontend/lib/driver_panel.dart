@@ -43,30 +43,62 @@ class _DriverPanelState extends State<DriverPanel> {
   bool get canShowCreate => rideId == null;
   bool get canShowPlannedActions => rideId != null && rideStatus == "PLANNED";
 
-  /// Mirrors backend `FARE_RATE_PER_KM` / `FARE_MIN_TRIP_KM` defaults.
-  static const double _fareRatePerKm = 10;
-  static const double _minBillableKm = 1;
   int minEstimatedFare = 0;
   int maxEstimatedFare = 0;
+  bool isFareEstimateLoading = false;
 
-  void _applyFareEstimatesForCurrentRoute() {
+  Future<void> _fetchFareEstimatesFromBackend() async {
     if (routeDistanceKm == null) {
       minEstimatedFare = 0;
       maxEstimatedFare = 0;
       return;
     }
-    final seatCount = int.tryParse(seatsController.text.trim()) ?? 4;
+    final seatCount = int.tryParse(seatsController.text.trim()) ?? 0;
     if (seatCount <= 0) {
       minEstimatedFare = 0;
       maxEstimatedFare = 0;
       return;
     }
-    final billableKm = routeDistanceKm! < _minBillableKm
-        ? _minBillableKm
-        : routeDistanceKm!;
-    final unitPassenger = billableKm * _fareRatePerKm;
-    maxEstimatedFare = (unitPassenger * seatCount).ceil();
-    minEstimatedFare = (_minBillableKm * _fareRatePerKm).ceil();
+    if (mounted) {
+      setState(() => isFareEstimateLoading = true);
+    }
+    try {
+      final res = await http.post(
+        Uri.parse('${backendUrl}/api/rides/fare-estimate'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'routeDistanceKm': routeDistanceKm,
+          'seats': seatCount,
+        }),
+      );
+      if (!mounted) return;
+      if (res.statusCode == 200) {
+        final data = json.decode(res.body);
+        setState(() {
+          minEstimatedFare = (data['minFare'] is num)
+              ? (data['minFare'] as num).toInt()
+              : int.tryParse(data['minFare']?.toString() ?? '0') ?? 0;
+          maxEstimatedFare = (data['maxFare'] is num)
+              ? (data['maxFare'] as num).toInt()
+              : int.tryParse(data['maxFare']?.toString() ?? '0') ?? 0;
+        });
+      } else {
+        setState(() {
+          minEstimatedFare = 0;
+          maxEstimatedFare = 0;
+        });
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        minEstimatedFare = 0;
+        maxEstimatedFare = 0;
+      });
+    } finally {
+      if (mounted) {
+        setState(() => isFareEstimateLoading = false);
+      }
+    }
   }
 
   @override
@@ -110,6 +142,17 @@ class _DriverPanelState extends State<DriverPanel> {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
+        if (data['features'] == null || (data['features'] as List).isEmpty) {
+          if (!mounted) return;
+          setState(() {
+            routePoints = [];
+            routeDistanceKm = 0;
+            routeDurationMin = 0;
+            minEstimatedFare = 0;
+            maxEstimatedFare = 0;
+          });
+          return;
+        }
         final coordinates = data['features'][0]['geometry']['coordinates'];
         final summary = data['features'][0]['properties']['summary'];
 
@@ -119,7 +162,16 @@ class _DriverPanelState extends State<DriverPanel> {
               .toList();
           routeDistanceKm = summary['distance'] / 1000;
           routeDurationMin = summary['duration'] / 60;
-          _applyFareEstimatesForCurrentRoute();
+        });
+        await _fetchFareEstimatesFromBackend();
+      } else {
+        if (!mounted) return;
+        setState(() {
+          routePoints = [];
+          routeDistanceKm = 0;
+          routeDurationMin = 0;
+          minEstimatedFare = 0;
+          maxEstimatedFare = 0;
         });
       }
     } catch (e) {
@@ -466,8 +518,7 @@ class _DriverPanelState extends State<DriverPanel> {
                         border: OutlineInputBorder(),
                       ),
                       keyboardType: TextInputType.number,
-                      onChanged: (_) =>
-                          setState(() => _applyFareEstimatesForCurrentRoute()),
+                      onChanged: (_) => _fetchFareEstimatesFromBackend(),
                     ),
                     const SizedBox(height: 16),
                     if (routeDistanceKm != null && routeDurationMin != null)
@@ -478,13 +529,19 @@ class _DriverPanelState extends State<DriverPanel> {
                     if (routeDistanceKm != null) ...[
                       const SizedBox(height: 8),
                       Text(
-                        'Est. minimum total (one seat × ${_minBillableKm.toStringAsFixed(0)} km floor): $minEstimatedFare Taka',
+                        'Est. minimum total: $minEstimatedFare Taka',
                         style: const TextStyle(fontSize: 13),
                       ),
                       Text(
-                        'Est. maximum total (all seats × full route, per seat): $maxEstimatedFare Taka',
+                        'Est. maximum total: $maxEstimatedFare Taka',
                         style: const TextStyle(fontSize: 13),
                       ),
+                      if (isFareEstimateLoading)
+                        const SizedBox(
+                          height: 14,
+                          width: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
                     ],
                     const SizedBox(height: 16),
                     if (canShowCreate)
@@ -618,6 +675,8 @@ class _DriverPanelState extends State<DriverPanel> {
         routePoints = [];
         routeDistanceKm = null;
         routeDurationMin = null;
+        minEstimatedFare = 0;
+        maxEstimatedFare = 0;
         originController.text = "Loading place...";
         destinationController.clear();
       });
@@ -649,6 +708,8 @@ class _DriverPanelState extends State<DriverPanel> {
         routePoints = [];
         routeDistanceKm = null;
         routeDurationMin = null;
+        minEstimatedFare = 0;
+        maxEstimatedFare = 0;
         originController.text = "Loading place...";
         destinationController.clear();
       });

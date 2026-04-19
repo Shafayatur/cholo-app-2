@@ -251,4 +251,44 @@ router.post("/", async (req, res) => {
   }
 });
 
+router.post("/:rideId/complete-payment", async (req, res) => {
+  const rideId = Number(req.params.rideId);
+  const userId = Number(req.body.userId);
+  const paymentMethod = String(req.body.paymentMethod || "").toLowerCase();
+  const allowedMethods = ["cash", "bkash", "nagad"];
+
+  if (!Number.isInteger(rideId) || !Number.isInteger(userId)) {
+    return res.status(400).json({ error: "rideId and userId are required" });
+  }
+
+  if (!allowedMethods.includes(paymentMethod)) {
+    return res.status(400).json({ error: "Invalid payment method" });
+  }
+
+  try {
+    const myBookings = await prisma.seatBooking.findMany({
+      where: { rideId, userId },
+      select: { seatNo: true, fare: true },
+      orderBy: { seatNo: "asc" },
+    });
+
+    if (!myBookings.length) {
+      return res.status(404).json({ error: "No booked seats found for this passenger" });
+    }
+
+    const payableAmount = myBookings.reduce((sum, b) => sum + Math.ceil(Number(b.fare) || 0), 0);
+    return res.json({
+      message: "Proceed to payment",
+      rideId,
+      userId,
+      paymentMethod,
+      payableAmount,
+      seats: myBookings.map((b) => b.seatNo),
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 module.exports = router;

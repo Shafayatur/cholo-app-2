@@ -21,6 +21,7 @@ class _SeatSelectionPageState extends State<SeatSelectionPage> {
   List<int> myBookedSeats = [];
   bool isLoading = false;
   bool isConfirming = false;
+  bool isProcessingPayment = false;
   int? unitPassengerFare;
 
   @override
@@ -148,6 +149,78 @@ class _SeatSelectionPageState extends State<SeatSelectionPage> {
     }
   }
 
+  Future<void> _showPaymentMethodChooser() async {
+    if (Session.userId == null || myBookedSeats.isEmpty) return;
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const ListTile(title: Text("Select payment method")),
+            ListTile(
+              leading: const Icon(Icons.payments_outlined),
+              title: const Text("Cash"),
+              onTap: () => Navigator.pop(context, "cash"),
+            ),
+            ListTile(
+              leading: const Icon(Icons.account_balance_wallet_outlined),
+              title: const Text("bKash"),
+              onTap: () => Navigator.pop(context, "bkash"),
+            ),
+            ListTile(
+              leading: const Icon(Icons.account_balance_wallet),
+              title: const Text("Nagad"),
+              onTap: () => Navigator.pop(context, "nagad"),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (selected != null) {
+      await _completeRideAndPayment(selected);
+    }
+  }
+
+  Future<void> _completeRideAndPayment(String paymentMethod) async {
+    if (Session.userId == null) return;
+    setState(() => isProcessingPayment = true);
+    try {
+      final res = await http.post(
+        Uri.parse("$backendUrl/seat-booking/${widget.rideId}/complete-payment"),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          "userId": Session.userId,
+          "paymentMethod": paymentMethod,
+        }),
+      );
+      final body = jsonDecode(res.body);
+      if (!mounted) return;
+      if (res.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              "Payment via ${body["paymentMethod"]} started. Payable: ${body["payableAmount"]} Taka",
+            ),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(body["error"]?.toString() ?? "Payment failed")),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Payment error: $e")));
+    } finally {
+      if (mounted) {
+        setState(() => isProcessingPayment = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -201,12 +274,35 @@ class _SeatSelectionPageState extends State<SeatSelectionPage> {
           if (myBookedSeats.isNotEmpty)
             Padding(
               padding: const EdgeInsets.all(12),
-              child: Text(
-                "Booked by you: ${myBookedSeats.join(", ")} (locked)",
-                style: const TextStyle(
-                  color: Colors.green,
-                  fontWeight: FontWeight.w600,
-                ),
+              child: Column(
+                children: [
+                  Text(
+                    "Booked by you: ${myBookedSeats.join(", ")} (locked)",
+                    style: const TextStyle(
+                      color: Colors.green,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: isProcessingPayment
+                          ? null
+                          : _showPaymentMethodChooser,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF16A34A),
+                      ),
+                      child: isProcessingPayment
+                          ? const SizedBox(
+                              height: 18,
+                              width: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text("Complete Ride & Payment"),
+                    ),
+                  ),
+                ],
               ),
             ),
 
