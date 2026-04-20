@@ -34,10 +34,10 @@ class _SeatSelectionPageState extends State<SeatSelectionPage> {
     if (!mounted) return;
     setState(() => isLoading = true);
     try {
-      final userIdQuery = Session.userId != null
-          ? "?userId=${Session.userId}"
-          : "";
-      final url = "$backendUrl/seat-booking/${widget.rideId}/seats$userIdQuery";
+      final userIdQuery =
+          Session.userId != null ? "?userId=${Session.userId}" : "";
+      final url =
+          "$backendUrl/seat-booking/${widget.rideId}/seats$userIdQuery";
 
       final res = await http.get(Uri.parse(url));
       final data = jsonDecode(res.body);
@@ -54,9 +54,8 @@ class _SeatSelectionPageState extends State<SeatSelectionPage> {
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error fetching seats: $e")));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text("Error fetching seats: $e")));
     } finally {
       if (mounted) {
         setState(() => isLoading = false);
@@ -77,25 +76,20 @@ class _SeatSelectionPageState extends State<SeatSelectionPage> {
 
   Future<void> confirmBooking() async {
     if (Session.userId == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Please login first")));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text("Please login first")));
       return;
     }
 
     if (myBookedSeats.isNotEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Booking already confirmed for this ride"),
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text("Booking already confirmed for this ride")));
       return;
     }
 
     if (selectedSeats.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Select at least one seat")));
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Select at least one seat")));
       return;
     }
 
@@ -122,26 +116,16 @@ class _SeatSelectionPageState extends State<SeatSelectionPage> {
         final msg = paid != null
             ? "Seats ${bookedNow.join(", ")} booked — $paidInt Taka total"
             : "Seats ${bookedNow.join(", ")} booked";
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg)),
-        );
-
-        setState(() {
-          selectedSeats.clear();
-        });
-
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+        setState(() => selectedSeats.clear());
         await fetchSeats();
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(body["error"]?.toString() ?? "Booking failed"),
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(body["error"]?.toString() ?? "Booking failed")));
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error booking seats: $e")));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text("Error booking seats: $e")));
     } finally {
       if (mounted) {
         setState(() => isConfirming = false);
@@ -153,27 +137,71 @@ class _SeatSelectionPageState extends State<SeatSelectionPage> {
     if (Session.userId == null || myBookedSeats.isEmpty) return;
     final selected = await showModalBottomSheet<String>(
       context: context,
-      builder: (_) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const ListTile(title: Text("Select payment method")),
-            ListTile(
-              leading: const Icon(Icons.payments_outlined),
-              title: const Text("Cash"),
-              onTap: () => Navigator.pop(context, "cash"),
-            ),
-            ListTile(
-              leading: const Icon(Icons.account_balance_wallet_outlined),
-              title: const Text("bKash"),
-              onTap: () => Navigator.pop(context, "bkash"),
-            ),
-            ListTile(
-              leading: const Icon(Icons.account_balance_wallet),
-              title: const Text("Nagad"),
-              onTap: () => Navigator.pop(context, "nagad"),
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        margin: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.12),
+              blurRadius: 24,
+              offset: const Offset(0, 8),
             ),
           ],
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(top: 12, bottom: 4),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    "Select Payment Method",
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+              const Divider(height: 1),
+              _paymentOption(
+                icon: Icons.payments_outlined,
+                label: "Cash",
+                sublabel: "Pay at destination",
+                color: const Color(0xFF16A34A),
+                value: "cash",
+              ),
+              _paymentOption(
+                icon: Icons.account_balance_wallet_outlined,
+                label: "bKash",
+                sublabel: "Mobile banking",
+                color: const Color(0xFFE2136E),
+                value: "bkash",
+              ),
+              _paymentOption(
+                icon: Icons.account_balance_wallet,
+                label: "Nagad",
+                sublabel: "Mobile banking",
+                color: const Color(0xFFF6921E),
+                value: "nagad",
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
         ),
       ),
     );
@@ -182,12 +210,39 @@ class _SeatSelectionPageState extends State<SeatSelectionPage> {
     }
   }
 
+  Widget _paymentOption({
+    required IconData icon,
+    required String label,
+    required String sublabel,
+    required Color color,
+    required String value,
+  }) {
+    return ListTile(
+      leading: Container(
+        width: 42,
+        height: 42,
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(icon, color: color, size: 22),
+      ),
+      title: Text(label,
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+      subtitle:
+          Text(sublabel, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+      trailing: const Icon(Icons.chevron_right, color: Colors.grey, size: 20),
+      onTap: () => Navigator.pop(context, value),
+    );
+  }
+
   Future<void> _completeRideAndPayment(String paymentMethod) async {
     if (Session.userId == null) return;
     setState(() => isProcessingPayment = true);
     try {
       final res = await http.post(
-        Uri.parse("$backendUrl/seat-booking/${widget.rideId}/complete-payment"),
+        Uri.parse(
+            "$backendUrl/seat-booking/${widget.rideId}/complete-payment"),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           "userId": Session.userId,
@@ -197,23 +252,20 @@ class _SeatSelectionPageState extends State<SeatSelectionPage> {
       final body = jsonDecode(res.body);
       if (!mounted) return;
       if (res.statusCode == 200) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              "Payment via ${body["paymentMethod"]} started. Payable: ${body["payableAmount"]} Taka",
-            ),
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+            "Payment via ${body["paymentMethod"]} started. Payable: ${body["payableAmount"]} Taka",
           ),
-        );
+        ));
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(body["error"]?.toString() ?? "Payment failed")),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content:
+                Text(body["error"]?.toString() ?? "Payment failed")));
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Payment error: $e")));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text("Payment error: $e")));
     } finally {
       if (mounted) {
         setState(() => isProcessingPayment = false);
@@ -221,185 +273,531 @@ class _SeatSelectionPageState extends State<SeatSelectionPage> {
     }
   }
 
+  /* ─── UI BUILDERS ─── */
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Select Seat"),
+        title: const Text("Select Your Seat"),
         backgroundColor: const Color(0xFFF98825),
-      ),
-      body: Column(
-        children: [
-          const SizedBox(height: 20),
-
-          Text(
-            "Ride ID: ${widget.rideId}",
-            style: const TextStyle(fontWeight: FontWeight.bold),
+        foregroundColor: Colors.white,
+        elevation: 0,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(
+            height: 1,
+            color: const Color(0xFFF98825).withOpacity(0.3),
           ),
+        ),
+      ),
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : totalSeats == 0
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.event_seat_outlined,
+                          size: 56, color: Colors.grey.shade400),
+                      const SizedBox(height: 16),
+                      Text("No seats available",
+                          style: TextStyle(
+                              color: Colors.grey.shade600, fontSize: 15)),
+                    ],
+                  ),
+                )
+              : Column(
+                  children: [
+                    _buildFareCard(),
+                    _buildLegend(),
+                    Expanded(child: _buildBusLayout()),
+                    if (myBookedSeats.isEmpty) _buildBottomBar(),
+                  ],
+                ),
+    );
+  }
 
-          const SizedBox(height: 8),
-
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+  /// Fare info banner below app bar.
+  Widget _buildFareCard() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 6),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: unitPassengerFare == null
+            ? Colors.red.shade50
+            : const Color(0xFFFFF7ED),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: unitPassengerFare == null
+              ? Colors.red.shade200
+              : const Color(0xFFFED7AA),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            unitPassengerFare == null
+                ? Icons.error_outline
+                : Icons.receipt_long_outlined,
+            color: unitPassengerFare == null
+                ? Colors.red.shade600
+                : const Color(0xFFEA580C),
+            size: 20,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
             child: Text(
               unitPassengerFare == null
-                  ? "Fare estimate unavailable (check ride distance data)."
+                  ? "Fare estimate unavailable — check ride distance data"
                   : selectedSeats.isEmpty
-                  ? "Per-seat fare (full route for now): ${unitPassengerFare!} Taka — select seats"
-                  : "Estimated payable: ${unitPassengerFare! * selectedSeats.length} Taka (${selectedSeats.length} × $unitPassengerFare)",
-              textAlign: TextAlign.center,
+                      ? "Per seat: ${unitPassengerFare!} Taka — tap seats to select"
+                      : "${selectedSeats.length} seat(s) × ${unitPassengerFare!} Taka = ${unitPassengerFare! * selectedSeats.length} Taka",
               style: TextStyle(
                 fontSize: 13,
-                color: unitPassengerFare == null ? Colors.red.shade700 : Colors.black87,
+                fontWeight: FontWeight.w500,
+                color: unitPassengerFare == null
+                    ? Colors.red.shade700
+                    : const Color(0xFF9A3412),
               ),
             ),
           ),
-
-          const SizedBox(height: 20),
-
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: const [
-                _SeatLegend(color: Color(0xFFE5E7EB), label: "Available"),
-                SizedBox(width: 10),
-                _SeatLegend(color: Color(0xFFF98825), label: "Selected"),
-                SizedBox(width: 10),
-                _SeatLegend(color: Color(0xFF3B82F6), label: "Booked"),
-              ],
+          if (selectedSeats.isNotEmpty)
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF98825),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                "${selectedSeats.length}",
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
-          ),
+        ],
+      ),
+    );
+  }
 
-          if (myBookedSeats.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.all(12),
+    /// Colour legend row.
+  Widget _buildLegend() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          _legendDot(const Color(0xFFF3F4F6), "Available", border: true),
+          const SizedBox(width: 14),
+          _legendDot(const Color(0xFFF98825), "Selected"),
+          const SizedBox(width: 14),
+          _legendDot(const Color(0xFF3B82F6), "Booked"),
+          if (myBookedSeats.isNotEmpty) ...[
+            const SizedBox(width: 14),
+            _legendDot(const Color(0xFF16A34A), "Yours"),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _legendDot(Color color, String label, {bool border = false}) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(3),
+            border: border
+                ? Border.all(color: Colors.grey.shade400, width: 1.2)
+                : null,
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 11,
+            color: Colors.black54,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Full bus-shaped seat grid with driver area, column headers, and aisle.
+  Widget _buildBusLayout() {
+    final rowsCount = (totalSeats / 4).ceil();
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade300, width: 1.5),
+          borderRadius: BorderRadius.circular(18),
+          color: Colors.grey.shade50,
+        ),
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          children: [
+            // ── Driver cabin ──
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(12),
+              ),
               child: Column(
                 children: [
-                  Text(
-                    "Booked by you: ${myBookedSeats.join(", ")} (locked)",
-                    style: const TextStyle(
-                      color: Colors.green,
-                      fontWeight: FontWeight.w600,
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.grey.shade300,
+                      border: Border.all(color: Colors.grey.shade400, width: 2),
                     ),
+                    child: Icon(Icons.drive_eta_rounded,
+                        size: 24, color: Colors.grey.shade600),
                   ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: isProcessingPayment
-                          ? null
-                          : _showPaymentMethodChooser,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF16A34A),
-                      ),
-                      child: isProcessingPayment
-                          ? const SizedBox(
-                              height: 18,
-                              width: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text("Complete Ride & Payment"),
-                    ),
-                  ),
+                  const SizedBox(height: 6),
+                  Text("Driver",
+                      style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade500)),
                 ],
               ),
             ),
 
-          Expanded(
-            child: isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : totalSeats == 0
-                ? const Center(child: Text("No seats available"))
-                : GridView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    itemCount: totalSeats,
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 4,
-                          mainAxisSpacing: 12,
-                          crossAxisSpacing: 12,
-                          childAspectRatio: 1,
-                        ),
-                    itemBuilder: (_, index) {
-                      final seatNo = index + 1;
-                      final isBooked = bookedSeats.contains(seatNo);
-                      final isSelected = selectedSeats.contains(seatNo);
+            const SizedBox(height: 14),
 
-                      Color color;
-                      if (isBooked) {
-                        color = const Color(0xFF3B82F6);
-                      } else if (isSelected) {
-                        color = const Color(0xFFF98825);
-                      } else {
-                        color = const Color(0xFFE5E7EB);
-                      }
+            // ── Column headers ──
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: Row(
+                children: [
+                  _colHeader("A"),
+                  const SizedBox(width: 4),
+                  _colHeader("B"),
+                  const SizedBox(width: 20),
+                  const SizedBox(
+                      width: 20,
+                      child: Center(
+                          child: Text("",
+                              style: TextStyle(fontSize: 10)))),
+                  const SizedBox(width: 20),
+                  _colHeader("C"),
+                  const SizedBox(width: 4),
+                  _colHeader("D"),
+                ],
+              ),
+            ),
 
-                      return GestureDetector(
-                        onTap: () => onSeatTapped(seatNo),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 150),
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: color,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            "$seatNo",
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: isBooked || isSelected
-                                  ? Colors.white
-                                  : Colors.black87,
-                            ),
-                          ),
+            const SizedBox(height: 6),
+
+            // ── Seat rows ──
+            ...List.generate(rowsCount, (rowIndex) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    _buildSeatTile(rowIndex * 4 + 1),
+                    const SizedBox(width: 4),
+                    _buildSeatTile(rowIndex * 4 + 2),
+                    const SizedBox(width: 20),
+                    // Aisle indicator
+                    Container(
+                      width: 20,
+                      alignment: Alignment.center,
+                      child: Container(
+                        width: 2,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(1),
                         ),
-                      );
-                    },
-                  ),
+                      ),
+                    ),
+                    const SizedBox(width: 20),
+                    _buildSeatTile(rowIndex * 4 + 3),
+                    const SizedBox(width: 4),
+                    _buildSeatTile(rowIndex * 4 + 4),
+                  ],
+                ),
+              );
+            }),
+
+            // ── My booked seats banner ──
+            if (myBookedSeats.isNotEmpty) _buildMyBookedBanner(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _colHeader(String label) {
+    return const SizedBox(
+      width: 52,
+      child: Center(
+        child: Text(
+          "",
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            color: Colors.grey,
+            letterSpacing: 0.5,
           ),
+        ),
+      ),
+    );
+  }
 
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: ElevatedButton(
+  /// Individual seat tile with four visual states.
+  Widget _buildSeatTile(int seatNo) {
+    if (seatNo > totalSeats) return const SizedBox(width: 52);
+
+    final isBooked = bookedSeats.contains(seatNo);
+    final isMine = myBookedSeats.contains(seatNo);
+    final isSelected = selectedSeats.contains(seatNo);
+    final canTap = !isBooked && !isMine;
+
+    Color bgColor;
+    Color textColor;
+    BoxBorder? border;
+    List<BoxShadow>? shadow;
+
+    if (isMine) {
+      bgColor = const Color(0xFF16A34A);
+      textColor = Colors.white;
+    } else if (isBooked) {
+      bgColor = const Color(0xFF3B82F6);
+      textColor = Colors.white;
+    } else if (isSelected) {
+      bgColor = const Color(0xFFF98825);
+      textColor = Colors.white;
+      shadow = [
+        BoxShadow(
+          color: const Color(0xFFF98825).withOpacity(0.35),
+          blurRadius: 10,
+          offset: const Offset(0, 3),
+        ),
+      ];
+    } else {
+      bgColor = Colors.white;
+      textColor = Colors.black87;
+      border = Border.all(color: Colors.grey.shade300, width: 1.2);
+    }
+
+    return GestureDetector(
+      onTap: canTap ? () => onSeatTapped(seatNo) : null,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        width: 52,
+        height: 44,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(8),
+          border: border,
+          boxShadow: shadow,
+        ),
+        child: Text(
+          "$seatNo",
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: textColor,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Green banner shown when user already has seats booked.
+  Widget _buildMyBookedBanner() {
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0FDF4),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFBBF7D0)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF16A34A).withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.check_circle,
+                    color: Color(0xFF16A34A), size: 18),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "Seats Confirmed",
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                        color: Color(0xFF166534),
+                      ),
+                    ),
+                    Text(
+                      "Seat ${myBookedSeats.join(", ")} — locked for you",
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.green.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
               onPressed:
-                  (selectedSeats.isEmpty ||
-                      myBookedSeats.isNotEmpty ||
-                      isConfirming)
-                  ? null
-                  : confirmBooking,
-              child: isConfirming
-                  ? const CircularProgressIndicator()
-                  : const Text("Confirm Booking"),
+                  isProcessingPayment ? null : _showPaymentMethodChooser,
+              icon: isProcessingPayment
+                  ? const SizedBox(
+                      height: 16,
+                      width: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.credit_card, size: 18),
+              label: const Text("Complete Ride & Payment",
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF16A34A),
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: Colors.green.shade300,
+                padding: const EdgeInsets.symmetric(vertical: 13),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+                elevation: 0,
+              ),
             ),
           ),
         ],
       ),
     );
   }
-}
 
-class _SeatLegend extends StatelessWidget {
-  final Color color;
-  final String label;
+  /// Persistent bottom bar with fare summary and confirm button.
+  Widget _buildBottomBar() {
+    final canConfirm = selectedSeats.isNotEmpty && !isConfirming;
+    final total = unitPassengerFare != null
+        ? unitPassengerFare! * selectedSeats.length
+        : null;
 
-  const _SeatLegend({required this.color, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 14,
-          height: 14,
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(4),
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: Colors.grey.shade200)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 16,
+            offset: const Offset(0, -4),
           ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            // Summary column
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    selectedSeats.isEmpty
+                        ? "No seat selected"
+                        : "Seat ${selectedSeats.toList()..sort()}",
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: selectedSeats.isEmpty
+                          ? Colors.grey.shade500
+                          : Colors.black54,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    total != null ? "$total Taka" : "—",
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: canConfirm
+                          ? const Color(0xFFF98825)
+                          : Colors.grey.shade400,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Confirm button
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              child: ElevatedButton(
+                onPressed: canConfirm ? confirmBooking : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: canConfirm
+                      ? const Color(0xFFF98825)
+                      : Colors.grey.shade200,
+                  foregroundColor:
+                      canConfirm ? Colors.white : Colors.grey.shade400,
+                  disabledBackgroundColor: Colors.grey.shade200,
+                  disabledForegroundColor: Colors.grey.shade400,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 28, vertical: 15),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  elevation: canConfirm ? 2 : 0,
+                ),
+                child: isConfirming
+                    ? const SizedBox(
+                        height: 18,
+                        width: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2.5, color: Colors.white))
+                    : const Text("Confirm",
+                        style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.2)),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 6),
-        Text(label),
-      ],
+      ),
     );
   }
 }
