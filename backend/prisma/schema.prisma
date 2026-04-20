@@ -103,6 +103,5 @@ model SeatBooking {
   ride          Ride      @relation(fields: [rideId], references: [id])
   user          User      @relation(fields: [userId], references: [id])
 
-  @@unique([rideId, seatNo])
 }
 
