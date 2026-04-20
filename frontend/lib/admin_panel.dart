@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'user_list_page.dart';
 import 'driver_list_page.dart';
+import 'login_screen.dart';
+import 'session.dart';
 
 class AdminPanel extends StatelessWidget {
   const AdminPanel({Key? key}) : super(key: key);
@@ -131,7 +133,11 @@ class AdminPanel extends StatelessWidget {
                   const SizedBox(width: 16),
                   Expanded(
                     child: _buildActionButton('Logout', Icons.logout, () {
-                      Navigator.of(context).pop();
+                      Session.userId = null;
+                      Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(builder: (_) => const LoginScreen()),
+                        (route) => false,
+                      );
                     }),
                   ),
                 ],

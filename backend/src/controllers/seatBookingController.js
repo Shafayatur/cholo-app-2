@@ -1,12 +1,10 @@
-const express = require("express");
-const router = express.Router();
 const prisma = require("../lib/prisma");
 const {
   passengerFareForRide,
   billableDistanceKmForRide,
   RATE_PER_KM,
   MIN_TRIP_KM,
-} = require("../lib/fare");
+} = require("./fareController");
 const socketHub = require("../lib/socketHub");
 
 const parseSeatNumbers = (input) => {
@@ -14,7 +12,7 @@ const parseSeatNumbers = (input) => {
   return [...new Set(input.map((value) => Number(value)).filter(Number.isInteger))];
 };
 
-router.get("/:rideId/seats", async (req, res) => {
+exports.getSeatsByRide = async (req, res) => {
   const rideId = Number(req.params.rideId);
   const userId = req.query.userId ? Number(req.query.userId) : null;
 
@@ -46,38 +44,32 @@ router.get("/:rideId/seats", async (req, res) => {
       unitPassengerFare = passengerFareForRide(ride);
       billableDistanceKm = billableDistanceKmForRide(ride);
     } catch (e) {
-      if (e.code !== "NO_DISTANCE_FOR_FARE") {
-        throw e;
-      }
+      if (e.code !== "NO_DISTANCE_FOR_FARE") throw e;
     }
 
-    const bookings = await prisma.seatBooking.findMany({
-      where: { rideId },
+    const activeBookings = await prisma.seatBooking.findMany({
+      where: { rideId, paidAt: null },
       include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
+        user: { select: { id: true, name: true, email: true } },
       },
     });
 
-    const bookingBySeat = new Map(bookings.map((booking) => [booking.seatNo, booking]));
+    const paidBookings = await prisma.seatBooking.findMany({
+      where: { rideId, paidAt: { not: null } },
+      include: {
+        user: { select: { id: true, name: true } },
+      },
+      orderBy: { paidAt: "desc" },
+    });
+
+    const bookingBySeat = new Map(activeBookings.map((booking) => [booking.seatNo, booking]));
     const seats = Array.from({ length: ride.seats }, (_, index) => {
       const seatNo = index + 1;
       const booking = bookingBySeat.get(seatNo);
       const isMine = Boolean(userId && booking?.userId === userId);
 
       if (!booking) {
-        return {
-          seatNo,
-          state: "AVAILABLE",
-          isMine: false,
-          passenger: null,
-          fare: null,
-        };
+        return { seatNo, state: "AVAILABLE", isMine: false, passenger: null, fare: null };
       }
 
       return {
@@ -93,26 +85,40 @@ router.get("/:rideId/seats", async (req, res) => {
       };
     });
 
-    res.json({
+    const gotTotalMoney = paidBookings.reduce((sum, item) => sum + Math.ceil(Number(item.fare) || 0), 0);
+    const breakdownByPassenger = new Map();
+    for (const item of paidBookings) {
+      const current = breakdownByPassenger.get(item.userId) || {
+        userId: item.userId,
+        passengerName: item.user?.name || `P${item.userId}`,
+        amount: 0,
+      };
+      current.amount += Math.ceil(Number(item.fare) || 0);
+      breakdownByPassenger.set(item.userId, current);
+    }
+
+    return res.json({
       totalSeats: ride.seats,
       totalFare: ride.totalFare,
+      gotTotalMoney,
+      paidBreakdown: Array.from(breakdownByPassenger.values()).sort((a, b) => b.amount - a.amount),
       unitPassengerFare,
       billableDistanceKm,
       fareRatePerKm: RATE_PER_KM,
       minBillableKm: MIN_TRIP_KM,
       seats,
-      bookedSeats: bookings.map((booking) => booking.seatNo),
+      bookedSeats: activeBookings.map((booking) => booking.seatNo),
       myBookedSeats: userId
-        ? bookings.filter((booking) => booking.userId === userId).map((booking) => booking.seatNo)
+        ? activeBookings.filter((booking) => booking.userId === userId).map((booking) => booking.seatNo)
         : [],
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Internal server error" });
+    return res.status(500).json({ error: "Internal server error" });
   }
-});
+};
 
-router.post("/", async (req, res) => {
+exports.createSeatBooking = async (req, res) => {
   const rideId = Number(req.body.rideId);
   const userId = Number(req.body.userId);
   const seatNumbers = parseSeatNumbers(req.body.seats ?? [req.body.seatNo]);
@@ -120,7 +126,6 @@ router.post("/", async (req, res) => {
   if (!Number.isInteger(rideId) || !Number.isInteger(userId)) {
     return res.status(400).json({ error: "rideId and userId are required" });
   }
-
   if (!seatNumbers.length) {
     return res.status(400).json({ error: "At least one seat must be selected" });
   }
@@ -140,35 +145,24 @@ router.post("/", async (req, res) => {
         },
       });
 
-      if (!ride) {
-        throw new Error("RIDE_NOT_FOUND");
-      }
+      if (!ride) throw new Error("RIDE_NOT_FOUND");
 
       const outOfRangeSeat = seatNumbers.find((seatNo) => seatNo < 1 || seatNo > ride.seats);
-      if (outOfRangeSeat) {
-        throw new Error("INVALID_SEAT_NUMBER");
-      }
+      if (outOfRangeSeat) throw new Error("INVALID_SEAT_NUMBER");
 
       const existingUserBookings = await tx.seatBooking.findMany({
-        where: { rideId, userId },
+        where: { rideId, userId, paidAt: null },
         select: { seatNo: true },
       });
-      if (existingUserBookings.length > 0) {
-        throw new Error("USER_ALREADY_BOOKED");
-      }
+      if (existingUserBookings.length > 0) throw new Error("USER_ALREADY_BOOKED");
 
       const conflictingBookings = await tx.seatBooking.findMany({
-        where: {
-          rideId,
-          seatNo: { in: seatNumbers },
-        },
+        where: { rideId, paidAt: null, seatNo: { in: seatNumbers } },
         select: { seatNo: true },
       });
-
       if (conflictingBookings.length > 0) {
-        const conflictSeatNos = conflictingBookings.map((booking) => booking.seatNo);
         const conflictError = new Error("SEAT_ALREADY_BOOKED");
-        conflictError.conflictSeatNos = conflictSeatNos;
+        conflictError.conflictSeatNos = conflictingBookings.map((booking) => booking.seatNo);
         throw conflictError;
       }
 
@@ -176,29 +170,26 @@ router.post("/", async (req, res) => {
       try {
         unitFare = passengerFareForRide(ride);
       } catch (e) {
-        if (e.code === "NO_DISTANCE_FOR_FARE") {
-          const wrapped = new Error("NO_DISTANCE_FOR_FARE");
-          throw wrapped;
-        }
+        if (e.code === "NO_DISTANCE_FOR_FARE") throw new Error("NO_DISTANCE_FOR_FARE");
         throw e;
       }
 
       const bookingTotal = unitFare * seatNumbers.length;
-
       await tx.seatBooking.createMany({
         data: seatNumbers.map((seatNo) => ({
           rideId,
           userId,
           seatNo,
           fare: unitFare,
+          paymentMethod: null,
+          paymentPhone: null,
+          paidAt: null,
         })),
       });
 
       const updatedRide = await tx.ride.update({
         where: { id: rideId },
-        data: {
-          totalFare: { increment: bookingTotal },
-        },
+        data: { totalFare: { increment: bookingTotal } },
         select: { totalFare: true },
       });
 
@@ -206,16 +197,12 @@ router.post("/", async (req, res) => {
         seats: seatNumbers,
         unitFare,
         bookingTotal,
-        rideTotalFare: updatedRide.totalFare,
+        rideTotalFare: Math.ceil(Number(updatedRide.totalFare) || 0),
       };
     });
 
-    socketHub.emitFareUpdate({
-      rideId,
-      totalFare: payload.rideTotalFare,
-    });
-
-    res.status(201).json({
+    socketHub.emitFareUpdate({ rideId, totalFare: payload.rideTotalFare });
+    return res.status(201).json({
       message: "Seat booking confirmed",
       seats: payload.seats,
       unitFare: payload.unitFare,
@@ -223,9 +210,7 @@ router.post("/", async (req, res) => {
       rideTotalFare: payload.rideTotalFare,
     });
   } catch (e) {
-    if (e.message === "RIDE_NOT_FOUND") {
-      return res.status(404).json({ error: "Ride not found" });
-    }
+    if (e.message === "RIDE_NOT_FOUND") return res.status(404).json({ error: "Ride not found" });
     if (e.message === "INVALID_SEAT_NUMBER") {
       return res.status(400).json({ error: "One or more seat numbers are invalid" });
     }
@@ -242,53 +227,81 @@ router.post("/", async (req, res) => {
     }
     if (e.message === "NO_DISTANCE_FOR_FARE") {
       return res.status(400).json({
-        error:
-          "Ride has no usable distance data (coordinates or route distance). Cannot compute fare.",
+        error: "Ride has no usable distance data (coordinates or route distance). Cannot compute fare.",
       });
     }
     console.error(e);
-    res.status(500).json({ error: "Internal server error" });
+    return res.status(500).json({ error: "Internal server error" });
   }
-});
+};
 
-router.post("/:rideId/complete-payment", async (req, res) => {
+exports.completePayment = async (req, res) => {
   const rideId = Number(req.params.rideId);
   const userId = Number(req.body.userId);
   const paymentMethod = String(req.body.paymentMethod || "").toLowerCase();
+  const paymentPhone = String(req.body.paymentPhone || "").trim();
   const allowedMethods = ["cash", "bkash", "nagad"];
 
   if (!Number.isInteger(rideId) || !Number.isInteger(userId)) {
     return res.status(400).json({ error: "rideId and userId are required" });
   }
-
   if (!allowedMethods.includes(paymentMethod)) {
     return res.status(400).json({ error: "Invalid payment method" });
   }
+  if (paymentMethod !== "cash" && !/^\d{11}$/.test(paymentPhone)) {
+    return res.status(400).json({ error: "Valid 11-digit phone number is required" });
+  }
 
   try {
-    const myBookings = await prisma.seatBooking.findMany({
-      where: { rideId, userId },
-      select: { seatNo: true, fare: true },
-      orderBy: { seatNo: "asc" },
+    const payload = await prisma.$transaction(async (tx) => {
+      const myBookings = await tx.seatBooking.findMany({
+        where: { rideId, userId, paidAt: null },
+        select: { id: true, seatNo: true, fare: true },
+        orderBy: { seatNo: "asc" },
+      });
+      if (!myBookings.length) throw new Error("NO_ACTIVE_BOOKINGS");
+
+      const payableAmount = myBookings.reduce((sum, b) => sum + Math.ceil(Number(b.fare) || 0), 0);
+      const bookingIds = myBookings.map((b) => b.id);
+      const now = new Date();
+
+      await tx.seatBooking.updateMany({
+        where: { id: { in: bookingIds } },
+        data: {
+          paymentMethod,
+          paymentPhone: paymentMethod === "cash" ? null : paymentPhone,
+          paidAt: now,
+        },
+      });
+
+      const updatedRide = await tx.ride.update({
+        where: { id: rideId },
+        data: { totalFare: { decrement: payableAmount } },
+        select: { totalFare: true },
+      });
+
+      return {
+        payableAmount,
+        seats: myBookings.map((b) => b.seatNo),
+        rideTotalFare: Math.max(0, Math.ceil(Number(updatedRide.totalFare) || 0)),
+      };
     });
 
-    if (!myBookings.length) {
-      return res.status(404).json({ error: "No booked seats found for this passenger" });
-    }
-
-    const payableAmount = myBookings.reduce((sum, b) => sum + Math.ceil(Number(b.fare) || 0), 0);
+    socketHub.emitFareUpdate({ rideId, totalFare: payload.rideTotalFare });
     return res.json({
-      message: "Proceed to payment",
+      message: "Payment completed and seats released",
       rideId,
       userId,
       paymentMethod,
-      payableAmount,
-      seats: myBookings.map((b) => b.seatNo),
+      payableAmount: payload.payableAmount,
+      seats: payload.seats,
+      rideTotalFare: payload.rideTotalFare,
     });
   } catch (err) {
+    if (err.message === "NO_ACTIVE_BOOKINGS") {
+      return res.status(404).json({ error: "No active booked seats found for this passenger" });
+    }
     console.error(err);
     return res.status(500).json({ error: "Internal server error" });
   }
-});
-
-module.exports = router;
+};

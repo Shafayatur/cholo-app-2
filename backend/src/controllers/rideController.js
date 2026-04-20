@@ -1,5 +1,4 @@
 const prisma = require("../lib/prisma");
-const { estimateRideFareRange, RATE_PER_KM, MIN_TRIP_KM } = require("../lib/fare");
 
 exports.createRide = async (req, res) => {
   try {
@@ -187,19 +186,5 @@ exports.startRide = async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
-  }
-};
-
-exports.getFareEstimate = async (req, res) => {
-  try {
-    const { routeDistanceKm, seats } = req.body;
-    const estimate = estimateRideFareRange({ routeDistanceKm, seats });
-    return res.json({
-      ...estimate,
-      ratePerKm: RATE_PER_KM,
-      minBillableKm: MIN_TRIP_KM,
-    });
-  } catch (error) {
-    return res.status(500).json({ message: error.message });
   }
 };

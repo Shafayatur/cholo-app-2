@@ -6,6 +6,20 @@ import 'package:http/http.dart' as http;
 
 import 'backend_config.dart';
 
+import 'package:intl/intl.dart';
+
+class DateFormatters {
+  static String rideTime(dynamic value) {
+    try {
+      return DateFormat('h:mm a, dd-MM-yyyy')
+          .format(DateTime.parse(value.toString()));
+    } catch (_) {
+      return "N/A";
+    }
+  }
+}
+
+
 class RideDetailsPage extends StatefulWidget {
   final Map<String, dynamic> ride;
 
@@ -20,6 +34,8 @@ class _RideDetailsPageState extends State<RideDetailsPage> {
   int totalSeats = 0;
   List<Map<String, dynamic>> seats = [];
   int totalFare = 0;
+  int gotTotalMoney = 0;
+  List<Map<String, dynamic>> paidBreakdown = [];
   Timer? _seatPoll;
 
   int? get rideId => widget.ride["id"] is int
@@ -57,6 +73,11 @@ class _RideDetailsPageState extends State<RideDetailsPage> {
           totalFare =
               tf is num ? tf.ceil() : int.tryParse(tf.toString()) ?? 0;
         }
+        final gm = data["gotTotalMoney"];
+        if (gm != null) {
+          gotTotalMoney = gm is num ? gm.ceil() : int.tryParse(gm.toString()) ?? 0;
+        }
+        paidBreakdown = List<Map<String, dynamic>>.from(data["paidBreakdown"] ?? []);
       });
     } catch (e) {
       if (!mounted) return;
@@ -298,8 +319,13 @@ class _RideDetailsPageState extends State<RideDetailsPage> {
           const Divider(height: 24),
           Row(
             children: [
-              _infoChip(Icons.route, "${widget.ride['routeDistanceKm']} km"),
-              const SizedBox(width: 12),
+              _infoChip(
+                Icons.route,
+                "   ${(widget.ride['routeDistanceKm'] is num
+                    ? (widget.ride['routeDistanceKm'] as num).toDouble()
+                    : double.tryParse(widget.ride['routeDistanceKm'].toString()) ?? 0)
+                    .toStringAsFixed(2)} km   ",
+              ),
               _infoChip(
                 Icons.schedule,
                 "${(widget.ride['routeDurationMin'] is num
@@ -307,7 +333,7 @@ class _RideDetailsPageState extends State<RideDetailsPage> {
                     : double.tryParse(widget.ride['routeDurationMin'].toString()) ?? 0)
                     .toStringAsFixed(2)} min   ",
               ),
-              _infoChip(Icons.event, widget.ride['departureTime'] ?? 'N/A'),
+              _infoChip(Icons.event, DateFormatters.rideTime(widget.ride['departureTime'])),
             ],
           )
         ],
@@ -384,7 +410,9 @@ class _RideDetailsPageState extends State<RideDetailsPage> {
     final bookedCount = seats.where((s) => 
         s["state"] == "BOOKED" || s["state"] == "BOOKED_BY_ME").length;
 
-    return Container(
+    return GestureDetector(
+      onTap: _showGotMoneyBreakdown,
+      child: Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -429,6 +457,12 @@ class _RideDetailsPageState extends State<RideDetailsPage> {
                       fontSize: 24,
                       fontWeight: FontWeight.w800,
                       letterSpacing: -0.5)),
+              const SizedBox(height: 4),
+              Text("Got money: $gotTotalMoney Taka",
+                  style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600)),
             ],
           ),
           const Spacer(),
@@ -444,6 +478,42 @@ class _RideDetailsPageState extends State<RideDetailsPage> {
                     fontWeight: FontWeight.w700,
                     fontSize: 12)),
           )
+        ],
+      ),
+    ));
+  }
+
+  void _showGotMoneyBreakdown() {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Collected Payments"),
+        content: paidBreakdown.isEmpty
+            ? const Text("No completed payments yet.")
+            : SizedBox(
+                width: double.maxFinite,
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: paidBreakdown.length,
+                  separatorBuilder: (_, __) => const Divider(height: 12),
+                  itemBuilder: (_, i) {
+                    final item = paidBreakdown[i];
+                    final name = item["passengerName"]?.toString() ?? "Passenger";
+                    final amount = item["amount"] is num
+                        ? (item["amount"] as num).toInt()
+                        : int.tryParse(item["amount"]?.toString() ?? "0") ?? 0;
+                    return Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                        Text("$amount Tk"),
+                      ],
+                    );
+                  },
+                ),
+              ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Close")),
         ],
       ),
     );

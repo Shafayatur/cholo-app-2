@@ -206,7 +206,11 @@ class _SeatSelectionPageState extends State<SeatSelectionPage> {
       ),
     );
     if (selected != null) {
-      await _completeRideAndPayment(selected);
+      if (selected == "cash") {
+        await _completeRideAndPayment(paymentMethod: selected);
+      } else {
+        await _showMobilePaymentDialog(selected);
+      }
     }
   }
 
@@ -237,7 +241,82 @@ class _SeatSelectionPageState extends State<SeatSelectionPage> {
     );
   }
 
-  Future<void> _completeRideAndPayment(String paymentMethod) async {
+  Future<void> _showMobilePaymentDialog(String paymentMethod) async {
+    final phoneController = TextEditingController();
+    final pinController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(paymentMethod == "bkash" ? "bKash Payment" : "Nagad Payment"),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: phoneController,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(
+                  labelText: "Phone Number",
+                  hintText: "01XXXXXXXXX",
+                ),
+                validator: (v) {
+                  final value = (v ?? "").trim();
+                  if (!RegExp(r"^\d{11}$").hasMatch(value)) {
+                    return "Enter valid 11-digit phone";
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: pinController,
+                obscureText: true,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: "PIN (mock)",
+                  hintText: "Enter 4-6 digit pin",
+                ),
+                validator: (v) {
+                  final value = (v ?? "").trim();
+                  if (value.length < 4) return "Invalid PIN";
+                  return null;
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (formKey.currentState?.validate() ?? false) {
+                Navigator.pop(context, true);
+              }
+            },
+            child: const Text("Pay"),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await _completeRideAndPayment(
+        paymentMethod: paymentMethod,
+        paymentPhone: phoneController.text.trim(),
+      );
+    }
+  }
+
+  Future<void> _completeRideAndPayment({
+    required String paymentMethod,
+    String? paymentPhone,
+  }) async {
     if (Session.userId == null) return;
     setState(() => isProcessingPayment = true);
     try {
@@ -248,6 +327,7 @@ class _SeatSelectionPageState extends State<SeatSelectionPage> {
         body: jsonEncode({
           "userId": Session.userId,
           "paymentMethod": paymentMethod,
+          "paymentPhone": paymentPhone,
         }),
       );
       final body = jsonDecode(res.body);
@@ -255,9 +335,10 @@ class _SeatSelectionPageState extends State<SeatSelectionPage> {
       if (res.statusCode == 200) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(
-            "Payment via ${body["paymentMethod"]} started. Payable: ${body["payableAmount"]} Taka",
+            "Payment complete via ${body["paymentMethod"]}. Paid: ${body["payableAmount"]} Taka",
           ),
         ));
+        await fetchSeats();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text(body["error"]?.toString() ?? "Payment failed")));

@@ -1,7 +1,3 @@
-/**
- * Single source of truth for passenger fare math (keep in sync with driver estimates in app).
- * Uses billable distance = max(MIN_TRIP_KM, raw route distance).
- */
 const RATE_PER_KM = Number(process.env.FARE_RATE_PER_KM || 10);
 const MIN_TRIP_KM = Number(process.env.FARE_MIN_TRIP_KM || 1);
 
@@ -32,19 +28,8 @@ function haversineKm(lat1, lon1, lat2, lon2) {
 }
 
 function rawDistanceKmForRide(ride) {
-  const {
-    originLat,
-    originLng,
-    destinationLat,
-    destinationLng,
-    routeDistanceKm,
-  } = ride;
-  const fromCoords = haversineKm(
-    originLat,
-    originLng,
-    destinationLat,
-    destinationLng
-  );
+  const { originLat, originLng, destinationLat, destinationLng, routeDistanceKm } = ride;
+  const fromCoords = haversineKm(originLat, originLng, destinationLat, destinationLng);
   if (fromCoords != null && !Number.isNaN(fromCoords) && fromCoords > 0) {
     return fromCoords;
   }
@@ -60,9 +45,6 @@ function billableDistanceKmForRide(ride) {
   return Math.max(MIN_TRIP_KM, raw);
 }
 
-/**
- * Fare for one passenger "leg" on this ride (today: whole stored route; later per segment).
- */
 function passengerFareForRide(ride) {
   const billable = billableDistanceKmForRide(ride);
   if (billable == null) {
@@ -70,7 +52,6 @@ function passengerFareForRide(ride) {
     err.code = "NO_DISTANCE_FOR_FARE";
     throw err;
   }
-  // Always charge whole currency units, rounded up.
   return Math.ceil(billable * RATE_PER_KM);
 }
 
@@ -112,12 +93,24 @@ function estimateRideFareRange({ routeDistanceKm, seats }) {
   };
 }
 
-module.exports = {
-  RATE_PER_KM,
-  MIN_TRIP_KM,
-  haversineKm,
-  rawDistanceKmForRide,
-  billableDistanceKmForRide,
-  passengerFareForRide,
-  estimateRideFareRange,
+exports.getFareEstimate = async (req, res) => {
+  try {
+    const { routeDistanceKm, seats } = req.body;
+    const estimate = estimateRideFareRange({ routeDistanceKm, seats });
+    return res.json({
+      ...estimate,
+      ratePerKm: RATE_PER_KM,
+      minBillableKm: MIN_TRIP_KM,
+    });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
 };
+
+module.exports.RATE_PER_KM = RATE_PER_KM;
+module.exports.MIN_TRIP_KM = MIN_TRIP_KM;
+module.exports.haversineKm = haversineKm;
+module.exports.rawDistanceKmForRide = rawDistanceKmForRide;
+module.exports.billableDistanceKmForRide = billableDistanceKmForRide;
+module.exports.passengerFareForRide = passengerFareForRide;
+module.exports.estimateRideFareRange = estimateRideFareRange;

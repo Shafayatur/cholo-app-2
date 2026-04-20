@@ -6,6 +6,8 @@ import 'package:latlong2/latlong.dart';
 import 'backend_config.dart';
 import 'ride_details_page.dart';
 import 'my_rides_page_driver.dart'; 
+import 'login_screen.dart';
+import 'session.dart';
 
 class DriverPanel extends StatefulWidget {
   const DriverPanel({Key? key}) : super(key: key);
@@ -64,7 +66,7 @@ class _DriverPanelState extends State<DriverPanel> {
     }
     try {
       final res = await http.post(
-        Uri.parse('${backendUrl}/api/rides/fare-estimate'),
+        Uri.parse('${backendUrl}/api/fares/estimate'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'routeDistanceKm': routeDistanceKm,
@@ -409,7 +411,13 @@ class _DriverPanelState extends State<DriverPanel> {
           ),
           IconButton(
             icon: const Icon(Icons.logout),
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () {
+              Session.userId = null;
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => const LoginScreen()),
+                (route) => false,
+              );
+            },
           ),
         ],
       ),

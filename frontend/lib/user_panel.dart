@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'SeatSelectionPage.dart';
+import 'login_screen.dart';
+import 'session.dart';
 
 class UserPanel extends StatelessWidget {
   const UserPanel({Key? key}) : super(key: key);
@@ -138,7 +140,11 @@ class UserPanel extends StatelessWidget {
                   const SizedBox(width: 16),
                   Expanded(
                     child: _buildActionButton('Logout', Icons.logout, () {
-                      Navigator.of(context).pop();
+                      Session.userId = null;
+                      Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(builder: (_) => const LoginScreen()),
+                        (route) => false,
+                      );
                     }),
                   ),
                 ],

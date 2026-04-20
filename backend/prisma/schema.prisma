@@ -89,16 +89,19 @@ model BookingRequest {
 }
 
 model SeatBooking {
-  id        Int      @id @default(autoincrement())
-  rideId    Int
-  userId    Int
-  seatNo    Int
-  fare      Float    // Added fare field to store calculated fare
+  id            Int       @id @default(autoincrement())
+  rideId        Int
+  userId        Int
+  seatNo        Int
+  fare          Float
+  paymentMethod String?
+  paymentPhone  String?
+  paidAt        DateTime?
 
-  createdAt DateTime @default(now())
+  createdAt     DateTime  @default(now())
 
-  ride      Ride     @relation(fields: [rideId], references: [id])
-  user      User     @relation(fields: [userId], references: [id])
+  ride          Ride      @relation(fields: [rideId], references: [id])
+  user          User      @relation(fields: [userId], references: [id])
 
   @@unique([rideId, seatNo])
 }
