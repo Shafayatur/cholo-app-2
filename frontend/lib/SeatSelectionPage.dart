@@ -229,9 +229,10 @@ class _SeatSelectionPageState extends State<SeatSelectionPage> {
       ),
       title: Text(label,
           style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-      subtitle:
-          Text(sublabel, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-      trailing: const Icon(Icons.chevron_right, color: Colors.grey, size: 20),
+      subtitle: Text(sublabel,
+          style: const TextStyle(fontSize: 12, color: Colors.grey)),
+      trailing:
+          const Icon(Icons.chevron_right, color: Colors.grey, size: 20),
       onTap: () => Navigator.pop(context, value),
     );
   }
@@ -259,8 +260,7 @@ class _SeatSelectionPageState extends State<SeatSelectionPage> {
         ));
       } else {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content:
-                Text(body["error"]?.toString() ?? "Payment failed")));
+            content: Text(body["error"]?.toString() ?? "Payment failed")));
       }
     } catch (e) {
       if (!mounted) return;
@@ -311,14 +311,13 @@ class _SeatSelectionPageState extends State<SeatSelectionPage> {
                   children: [
                     _buildFareCard(),
                     _buildLegend(),
-                    Expanded(child: _buildBusLayout()),
+                    Expanded(child: _buildCarLayout()),
                     if (myBookedSeats.isEmpty) _buildBottomBar(),
                   ],
                 ),
     );
   }
 
-  /// Fare info banner below app bar.
   Widget _buildFareCard() {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 6),
@@ -351,7 +350,7 @@ class _SeatSelectionPageState extends State<SeatSelectionPage> {
               unitPassengerFare == null
                   ? "Fare estimate unavailable — check ride distance data"
                   : selectedSeats.isEmpty
-                      ? "Per seat: ${unitPassengerFare!} Taka — tap seats to select"
+                      ? "Per seat: ${unitPassengerFare!} Taka — tap to select"
                       : "${selectedSeats.length} seat(s) × ${unitPassengerFare!} Taka = ${unitPassengerFare! * selectedSeats.length} Taka",
               style: TextStyle(
                 fontSize: 13,
@@ -384,7 +383,6 @@ class _SeatSelectionPageState extends State<SeatSelectionPage> {
     );
   }
 
-    /// Colour legend row.
   Widget _buildLegend() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -433,138 +431,201 @@ class _SeatSelectionPageState extends State<SeatSelectionPage> {
     );
   }
 
-  /// Full bus-shaped seat grid with driver area, column headers, and aisle.
-  Widget _buildBusLayout() {
-    final rowsCount = (totalSeats / 4).ceil();
+  /* ─── CAR LAYOUT ─── */
+
+  Widget _buildCarLayout() {
+    // Seat 1 is always front passenger. Rest go to back rows (max 3 per row).
+    final int backSeatCount = totalSeats > 1 ? totalSeats - 1 : 0;
+
+    // Dynamically build back rows
+    List<Widget> backRowWidgets = [];
+    int remaining = backSeatCount;
+    int seatNo = 2; // back seats start at 2
+
+    while (remaining > 0) {
+      int inThisRow = remaining >= 3 ? 3 : remaining;
+      List<Widget> seats = [];
+      for (int i = 0; i < inThisRow; i++) {
+        if (i > 0) seats.add(const SizedBox(width: 12));
+        seats.add(_buildSeatTile(seatNo));
+        seatNo++;
+      }
+      if (backRowWidgets.isNotEmpty) {
+        backRowWidgets.add(const SizedBox(height: 14));
+      }
+      backRowWidgets.add(
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: seats,
+        ),
+      );
+      remaining -= inThisRow;
+    }
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-      child: Container(
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.shade300, width: 1.5),
-          borderRadius: BorderRadius.circular(18),
-          color: Colors.grey.shade50,
-        ),
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          children: [
-            // ── Driver cabin ──
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade200,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.grey.shade300,
-                      border: Border.all(color: Colors.grey.shade400, width: 2),
-                    ),
-                    child: Icon(Icons.drive_eta_rounded,
-                        size: 24, color: Colors.grey.shade600),
+      padding: const EdgeInsets.fromLTRB(28, 4, 28, 16),
+      child: Column(
+        children: [
+          // Headlights
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _lightDot(const Color(0xFFFDE68A), const Color(0xFFFBBF24)),
+              _lightDot(const Color(0xFFFDE68A), const Color(0xFFFBBF24)),
+            ],
+          ),
+
+          // ── Car body ──
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 22),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFDFDFE),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: Colors.grey.shade300),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.04),
+                  blurRadius: 14,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                // Windshield
+                Container(
+                  width: 120,
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0F9FF),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFBAE6FD)),
                   ),
-                  const SizedBox(height: 6),
-                  Text("Driver",
+                  child: const Center(
+                    child: Text(
+                      "FRONT",
                       style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.grey.shade500)),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 14),
-
-            // ── Column headers ──
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: Row(
-                children: [
-                  _colHeader("A"),
-                  const SizedBox(width: 4),
-                  _colHeader("B"),
-                  const SizedBox(width: 20),
-                  const SizedBox(
-                      width: 20,
-                      child: Center(
-                          child: Text("",
-                              style: TextStyle(fontSize: 10)))),
-                  const SizedBox(width: 20),
-                  _colHeader("C"),
-                  const SizedBox(width: 4),
-                  _colHeader("D"),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 6),
-
-            // ── Seat rows ──
-            ...List.generate(rowsCount, (rowIndex) {
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Row(
-                  children: [
-                    _buildSeatTile(rowIndex * 4 + 1),
-                    const SizedBox(width: 4),
-                    _buildSeatTile(rowIndex * 4 + 2),
-                    const SizedBox(width: 20),
-                    // Aisle indicator
-                    Container(
-                      width: 20,
-                      alignment: Alignment.center,
-                      child: Container(
-                        width: 2,
-                        height: 24,
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade300,
-                          borderRadius: BorderRadius.circular(1),
-                        ),
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF7DD3FC),
+                        letterSpacing: 3,
                       ),
                     ),
-                    const SizedBox(width: 20),
-                    _buildSeatTile(rowIndex * 4 + 3),
-                    const SizedBox(width: 4),
-                    _buildSeatTile(rowIndex * 4 + 4),
+                  ),
+                ),
+
+                const SizedBox(height: 22),
+
+                // ── Front row: passenger (left) + driver (right) ──
+                Row(
+                  children: [
+                    _buildSeatTile(1),
+                    const Spacer(),
+                    _buildDriverTile(),
                   ],
                 ),
-              );
-            }),
 
-            // ── My booked seats banner ──
-            if (myBookedSeats.isNotEmpty) _buildMyBookedBanner(),
-          ],
-        ),
+                const SizedBox(height: 20),
+
+                // Divider
+                Container(
+                  height: 1,
+                  color: Colors.grey.shade200,
+                ),
+                const SizedBox(height: 6),
+                const Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    "BACK",
+                    style: TextStyle(
+                      fontSize: 8,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFFBDBDBD),
+                      letterSpacing: 2,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // ── Back rows (dynamic) ──
+                if (backRowWidgets.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Text(
+                      "No back seats",
+                      style: TextStyle(
+                          fontSize: 12, color: Colors.grey.shade400),
+                    ),
+                  )
+                else
+                  Column(children: backRowWidgets),
+
+                // My booked banner
+                if (myBookedSeats.isNotEmpty) ...[
+                  const SizedBox(height: 18),
+                  _buildMyBookedBanner(),
+                ],
+              ],
+            ),
+          ),
+
+          // Tail lights
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _lightDot(const Color(0xFFFECACA), const Color(0xFFFCA5A5)),
+              _lightDot(const Color(0xFFFECACA), const Color(0xFFFCA5A5)),
+            ],
+          ),
+        ],
       ),
     );
   }
 
-  Widget _colHeader(String label) {
-    return const SizedBox(
-      width: 52,
-      child: Center(
-        child: Text(
-          "",
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
-            color: Colors.grey,
-            letterSpacing: 0.5,
+  Widget _lightDot(Color fill, Color stroke) {
+    return Container(
+      width: 8,
+      height: 8,
+      decoration: BoxDecoration(
+        color: fill,
+        shape: BoxShape.circle,
+        border: Border.all(color: stroke),
+      ),
+    );
+  }
+
+  /// Non-interactive driver tile.
+  Widget _buildDriverTile() {
+    return Container(
+      width: 64,
+      height: 52,
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.person, size: 18, color: Colors.grey.shade500),
+          const SizedBox(height: 2),
+          Text(
+            "Driver",
+            style: TextStyle(
+              fontSize: 8,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade500,
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
 
   /// Individual seat tile with four visual states.
   Widget _buildSeatTile(int seatNo) {
-    if (seatNo > totalSeats) return const SizedBox(width: 52);
+    if (seatNo > totalSeats) return const SizedBox(width: 64);
 
     final isBooked = bookedSeats.contains(seatNo);
     final isMine = myBookedSeats.contains(seatNo);
@@ -603,19 +664,19 @@ class _SeatSelectionPageState extends State<SeatSelectionPage> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         curve: Curves.easeOut,
-        width: 52,
-        height: 44,
+        width: 64,
+        height: 52,
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: bgColor,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(10),
           border: border,
           boxShadow: shadow,
         ),
         child: Text(
           "$seatNo",
           style: TextStyle(
-            fontSize: 14,
+            fontSize: 15,
             fontWeight: FontWeight.w700,
             color: textColor,
           ),
@@ -624,10 +685,9 @@ class _SeatSelectionPageState extends State<SeatSelectionPage> {
     );
   }
 
-  /// Green banner shown when user already has seats booked.
+  /// Green banner when user already has seats booked.
   Widget _buildMyBookedBanner() {
     return Container(
-      margin: const EdgeInsets.only(top: 12),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: const Color(0xFFF0FDF4),
@@ -728,7 +788,6 @@ class _SeatSelectionPageState extends State<SeatSelectionPage> {
         top: false,
         child: Row(
           children: [
-            // Summary column
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -762,38 +821,33 @@ class _SeatSelectionPageState extends State<SeatSelectionPage> {
                 ],
               ),
             ),
-
-            // Confirm button
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              child: ElevatedButton(
-                onPressed: canConfirm ? confirmBooking : null,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: canConfirm
-                      ? const Color(0xFFF98825)
-                      : Colors.grey.shade200,
-                  foregroundColor:
-                      canConfirm ? Colors.white : Colors.grey.shade400,
-                  disabledBackgroundColor: Colors.grey.shade200,
-                  disabledForegroundColor: Colors.grey.shade400,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 28, vertical: 15),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                  elevation: canConfirm ? 2 : 0,
-                ),
-                child: isConfirming
-                    ? const SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2.5, color: Colors.white))
-                    : const Text("Confirm",
-                        style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.2)),
+            ElevatedButton(
+              onPressed: canConfirm ? confirmBooking : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: canConfirm
+                    ? const Color(0xFFF98825)
+                    : Colors.grey.shade200,
+                foregroundColor:
+                    canConfirm ? Colors.white : Colors.grey.shade400,
+                disabledBackgroundColor: Colors.grey.shade200,
+                disabledForegroundColor: Colors.grey.shade400,
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 28, vertical: 15),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+                elevation: canConfirm ? 2 : 0,
               ),
+              child: isConfirming
+                  ? const SizedBox(
+                      height: 18,
+                      width: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2.5, color: Colors.white))
+                  : const Text("Confirm",
+                      style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.2)),
             ),
           ],
         ),
