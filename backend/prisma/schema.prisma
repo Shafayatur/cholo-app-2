@@ -7,6 +7,68 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id              Int              @id @default(autoincrement())
+  name            String
+  email           String           @unique
+  password        String?
+  role            Role             @default(PASSENGER)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  bookingRequests BookingRequest[] @relation("PassengerBookings")
+  rides           Ride[]
+  seatBookings    SeatBooking[]
+}
+
+model Ride {
+  id               Int              @id @default(autoincrement())
+  driverId         Int
+  origin           String
+  destination      String
+  originLat        Float?
+  originLng        Float?
+  destinationLat   Float?
+  destinationLng   Float?
+  routeDistanceKm  Float?
+  routeDurationMin Float?
+  departureTime    DateTime
+  seats            Int              @default(4)
+  status           RideStatus       @default(PLANNED)
+  totalFare        Float            @default(0)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  bookingRequests  BookingRequest[]
+  driver           User             @relation(fields: [driverId], references: [id])
+  seatBookings     SeatBooking[]
+}
+
+model BookingRequest {
+  id          Int           @id @default(autoincrement())
+  rideId      Int
+  passengerId Int
+  status      BookingStatus @default(PENDING)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  passenger   User          @relation("PassengerBookings", fields: [passengerId], references: [id])
+  ride        Ride          @relation(fields: [rideId], references: [id])
+
+  @@unique([rideId, passengerId])
+}
+
+model SeatBooking {
+  id            Int       @id @default(autoincrement())
+  rideId        Int
+  userId        Int
+  seatNo        Int
+  fare          Float
+  paymentMethod String?
+  paymentPhone  String?
+  paidAt        DateTime?
+  createdAt     DateTime  @default(now())
+  ride          Ride      @relation(fields: [rideId], references: [id])
+  user          User      @relation(fields: [userId], references: [id])
+}
+
 enum Role {
   PASSENGER
   DRIVER
@@ -25,83 +87,3 @@ enum BookingStatus {
   ACCEPTED
   REJECTED
 }
-
-model User {
-  id              Int              @id @default(autoincrement())
-  name            String
-  email           String           @unique
-  password        String?
-  role            Role             @default(PASSENGER)
-
-  rides           Ride[]           // driver side relation
-
-  bookingRequests BookingRequest[] @relation("PassengerBookings")
-
-  seatBookings    SeatBooking[]    // ✅ FIX: added back relation
-
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-}
-
-model Ride {
-  id               Int               @id @default(autoincrement())
-  driverId         Int
-  origin           String
-  destination      String
-
-  originLat        Float?
-  originLng        Float?
-  destinationLat   Float?
-  destinationLng   Float?
-
-  routeDistanceKm  Float?
-  routeDurationMin Float?
-
-  departureTime    DateTime
-  seats            Int              @default(4)
-  status           RideStatus       @default(PLANNED)
-  totalFare        Float            @default(0) // Add totalFare to track driver's earnings
-
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
-
-  driver           User             @relation(fields: [driverId], references: [id])
-
-  bookingRequests  BookingRequest[]
-
-  seatBookings     SeatBooking[]    // ✅ FIX: added back relation
-}
-
-model BookingRequest {
-  id          Int           @id @default(autoincrement())
-  rideId      Int
-  passengerId Int
-  status      BookingStatus @default(PENDING)
-
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-
-  ride        Ride          @relation(fields: [rideId], references: [id])
-
-  passenger   User          @relation("PassengerBookings", fields: [passengerId], references: [id])
-
-  @@unique([rideId, passengerId])
-}
-
-model SeatBooking {
-  id            Int       @id @default(autoincrement())
-  rideId        Int
-  userId        Int
-  seatNo        Int
-  fare          Float
-  paymentMethod String?
-  paymentPhone  String?
-  paidAt        DateTime?
-
-  createdAt     DateTime  @default(now())
-
-  ride          Ride      @relation(fields: [rideId], references: [id])
-  user          User      @relation(fields: [userId], references: [id])
-
-}
-
