@@ -105,40 +105,55 @@ class _RideDetailsPageState extends State<RideDetailsPage> {
     });
     
     try {
-      // Extract passengers directly from seats data
-      List<Map<String, dynamic>> extractedPassengers = [];
+      List<Map<String, dynamic>> allPassengers = [];
       
+      // 1. Get active passengers from seats (not paid yet)
       for (var seat in seats) {
-        // Check if seat is booked and has passenger
         final isBooked = seat["state"] == "BOOKED" || seat["state"] == "BOOKED_BY_ME";
         final passenger = seat["passenger"];
         
         if (isBooked && passenger != null) {
-          // Avoid duplicate passengers (same person booking multiple seats)
-          bool exists = extractedPassengers.any((p) => p['id'] == passenger['id']);
-          
+          bool exists = allPassengers.any((p) => p['id'] == passenger['id']);
           if (!exists) {
-            extractedPassengers.add({
+            allPassengers.add({
               'id': passenger['id'],
               'name': passenger['name'] ?? 'Unknown',
               'email': passenger['email'] ?? 'No email',
               'seatNo': seat['seatNo'],
               'fare': seat['fare'] ?? 0,
-              'paymentStatus': 'PENDING', // Default status
-              'bookingStatus': 'CONFIRMED',
+              'status': 'ACTIVE',  // Still in car, not paid
+              'paymentStatus': 'PENDING',
+            });
+          }
+        }
+      }
+      
+      // 2. Get paid passengers from paidBreakdown (already left)
+      if (paidBreakdown.isNotEmpty) {
+        for (var paid in paidBreakdown) {
+          bool exists = allPassengers.any((p) => p['id'] == paid['userId']);
+          if (!exists) {
+            allPassengers.add({
+              'id': paid['userId'],
+              'name': paid['passengerName'] ?? 'Unknown',
+              'email': 'N/A',  // Email not available in paidBreakdown
+              'seatNo': 'N/A',  // Seat info not available
+              'fare': paid['amount'] ?? 0,
+              'status': 'COMPLETED',  // Already left the car
+              'paymentStatus': 'PAID',
             });
           }
         }
       }
       
       setState(() {
-        passengers = extractedPassengers;
+        passengers = allPassengers;
       });
       
-      print("✅ Loaded ${extractedPassengers.length} passengers from seats");
+      print("✅ Loaded ${allPassengers.length} passengers (${allPassengers.where((p) => p['status'] == 'ACTIVE').length} active, ${allPassengers.where((p) => p['status'] == 'COMPLETED').length} completed)");
       
     } catch (e) {
-      print("Error extracting passengers: $e");
+      print("Error loading passengers: $e");
     } finally {
       setState(() {
         isLoadingPassengers = false;
@@ -508,8 +523,8 @@ class _RideDetailsPageState extends State<RideDetailsPage> {
   }
 
   Widget _buildPassengerTile(Map<String, dynamic> passenger) {
+    final bool isActive = passenger['status'] == 'ACTIVE';
     final bool hasPaid = passenger['paymentStatus'] == 'PAID';
-    final String bookingStatus = passenger['bookingStatus'] ?? 'CONFIRMED';
     
     return InkWell(
       onTap: () => _showPassengerDetailsDialog(passenger),
@@ -521,7 +536,9 @@ class _RideDetailsPageState extends State<RideDetailsPage> {
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: const Color(0xFFF98825).withOpacity(0.1),
+                color: isActive 
+                    ? const Color(0xFFF98825).withOpacity(0.1)
+                    : Colors.grey.shade100,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Center(
@@ -530,7 +547,7 @@ class _RideDetailsPageState extends State<RideDetailsPage> {
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: const Color(0xFFF98825),
+                    color: isActive ? const Color(0xFFF98825) : Colors.grey.shade600,
                   ),
                 ),
               ),
@@ -545,13 +562,14 @@ class _RideDetailsPageState extends State<RideDetailsPage> {
                     children: [
                       Text(
                         passenger['name'],
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.w600,
                           fontSize: 14,
+                          color: isActive ? Colors.black87 : Colors.grey.shade600,
                         ),
                       ),
                       const SizedBox(width: 8),
-                      if (hasPaid)
+                      if (isActive)
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
@@ -559,7 +577,7 @@ class _RideDetailsPageState extends State<RideDetailsPage> {
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Text(
-                            'Paid',
+                            'In Car',
                             style: TextStyle(
                               fontSize: 9,
                               color: Colors.green.shade800,
@@ -567,18 +585,18 @@ class _RideDetailsPageState extends State<RideDetailsPage> {
                             ),
                           ),
                         ),
-                      if (!hasPaid && bookingStatus == 'CONFIRMED')
+                      if (!isActive)
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: Colors.orange.shade100,
+                            color: Colors.blue.shade100,
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Text(
-                            'Pending',
+                            'Left',
                             style: TextStyle(
                               fontSize: 9,
-                              color: Colors.orange.shade800,
+                              color: Colors.blue.shade800,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -588,20 +606,21 @@ class _RideDetailsPageState extends State<RideDetailsPage> {
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      Icon(Icons.phone, size: 12, color: Colors.grey.shade500),
+                      Icon(Icons.attach_money, size: 12, color: Colors.grey.shade500),
                       const SizedBox(width: 4),
                       Text(
-                        passenger['phone'] ?? 'N/A',
+                        'Fare: ${passenger['fare']} Taka',
                         style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                       ),
                       const SizedBox(width: 12),
-                      Icon(Icons.location_on, size: 12, color: Colors.grey.shade500),
+                      Icon(Icons.confirmation_number, size: 12, color: Colors.grey.shade500),
                       const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          passenger['pickupPoint'] ?? 'N/A',
-                          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-                          overflow: TextOverflow.ellipsis,
+                      Text(
+                        passenger['paymentStatus'],
+                        style: TextStyle(
+                          fontSize: 11, 
+                          color: hasPaid ? Colors.green.shade700 : Colors.orange.shade700,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ],
@@ -610,6 +629,7 @@ class _RideDetailsPageState extends State<RideDetailsPage> {
               ),
             ),
             
+            // Complaint Button - Always enabled for both active AND completed passengers
             Container(
               decoration: BoxDecoration(
                 color: Colors.red.shade50,
