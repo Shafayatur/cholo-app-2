@@ -315,56 +315,114 @@ class _RideDetailsPageState extends State<RideDetailsPage> {
   void _showComplaintDialog(Map<String, dynamic> passenger) {
     final TextEditingController complaintController = TextEditingController();
     String severity = 'MEDIUM';
+    bool isSubmitting = false;
     
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text('File Complaint against ${passenger['name']}'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButtonFormField<String>(
-                value: severity,
-                decoration: const InputDecoration(labelText: 'Severity'),
-                items: const [
-                  DropdownMenuItem(value: 'LOW', child: Text('Low')),
-                  DropdownMenuItem(value: 'MEDIUM', child: Text('Medium')),
-                  DropdownMenuItem(value: 'HIGH', child: Text('High')),
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text('File Complaint against ${passenger['name']}'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<String>(
+                    value: severity,
+                    decoration: const InputDecoration(labelText: 'Severity'),
+                    items: const [
+                      DropdownMenuItem(value: 'LOW', child: Text('Low - Minor issue')),
+                      DropdownMenuItem(value: 'MEDIUM', child: Text('Medium - Concerning')),
+                      DropdownMenuItem(value: 'HIGH', child: Text('High - Serious matter')),
+                    ],
+                    onChanged: (value) {
+                      setState(() {
+                        severity = value!;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: complaintController,
+                    maxLines: 4,
+                    decoration: const InputDecoration(
+                      labelText: 'Complaint Details',
+                      hintText: 'Describe what happened...',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
                 ],
-                onChanged: (value) {
-                  severity = value!;
-                },
               ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: complaintController,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                  labelText: 'Complaint Details',
-                  hintText: 'Describe the issue...',
-                  border: OutlineInputBorder(),
+              actions: [
+                TextButton(
+                  onPressed: isSubmitting ? null : () => Navigator.pop(context),
+                  child: const Text('Cancel'),
                 ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                // TODO: Implement complaint submission to backend
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Complaint submitted (demo)')),
-                );
-                Navigator.pop(context);
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-              child: const Text('Submit'),
-            ),
-          ],
+                ElevatedButton(
+                  onPressed: isSubmitting
+                      ? null
+                      : () async {
+                          if (complaintController.text.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Please describe the complaint')),
+                            );
+                            return;
+                          }
+                          
+                          setState(() => isSubmitting = true);
+                          
+                          try {
+                            final response = await http.post(
+                              Uri.parse('$backendUrl/api/complaints'),
+                              headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': 'Bearer ${Session.userId}',
+                              },
+                              body: jsonEncode({
+                                'driverId': Session.userId,
+                                'passengerId': passenger['id'],
+                                'rideId': rideId,
+                                'description': complaintController.text,
+                                'severity': severity,
+                              }),
+                            );
+                            
+                            if (response.statusCode == 201) {
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Complaint filed successfully! Admin will review it.'),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                            } else {
+                              final error = jsonDecode(response.body);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(error['error'] ?? 'Failed to file complaint')),
+                              );
+                            }
+                          } catch (e) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Error: $e')),
+                            );
+                          } finally {
+                            setState(() => isSubmitting = false);
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                  ),
+                  child: isSubmitting
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text('Submit Complaint'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
