@@ -18,7 +18,98 @@ class _ComplaintDetailsPageState extends State<ComplaintDetailsPage> {
   final TextEditingController _messageController = TextEditingController();
   final Color brandOrange = const Color(0xFFF98825);
 
+  // Helper methods to get correct complainant/accused based on complaint type
+  String getComplainant() {
+    switch (widget.complaint['type']) {
+      case 'DRIVER_COMPLAINT':
+        return widget.complaint['driver']?['name'] ?? 'Unknown Driver';
+      case 'PASSENGER_TO_DRIVER':
+        return widget.complaint['passenger']?['name'] ?? 'Unknown Passenger';
+      case 'PASSENGER_TO_PASSENGER':
+        return 'Passenger (Anonymous)';
+      default:
+        return 'Unknown';
+    }
+  }
+
+  String getAccused() {
+    switch (widget.complaint['type']) {
+      case 'DRIVER_COMPLAINT':
+        return widget.complaint['passenger']?['name'] ?? 'Unknown Passenger';
+      case 'PASSENGER_TO_DRIVER':
+        return widget.complaint['driver']?['name'] ?? 'Unknown Driver';
+      case 'PASSENGER_TO_PASSENGER':
+        return widget.complaint['passenger']?['name'] ?? 'Unknown Passenger';
+      default:
+        return 'Unknown';
+    }
+  }
+
+  String getComplaintTypeText() {
+    switch (widget.complaint['type']) {
+      case 'DRIVER_COMPLAINT':
+        return 'Driver → Passenger';
+      case 'PASSENGER_TO_DRIVER':
+        return 'Passenger → Driver';
+      case 'PASSENGER_TO_PASSENGER':
+        return 'Passenger → Passenger';
+      default:
+        return widget.complaint['type'] ?? 'Unknown';
+    }
+  }
+
+  IconData getComplaintIcon() {
+    switch (widget.complaint['type']) {
+      case 'DRIVER_COMPLAINT':
+        return Icons.drive_eta;
+      case 'PASSENGER_TO_DRIVER':
+        return Icons.person;
+      case 'PASSENGER_TO_PASSENGER':
+        return Icons.people;
+      default:
+        return Icons.report_problem;
+    }
+  }
+
+  Color getComplaintTypeColor() {
+    switch (widget.complaint['type']) {
+      case 'DRIVER_COMPLAINT':
+        return Colors.blue;
+      case 'PASSENGER_TO_DRIVER':
+        return Colors.orange;
+      case 'PASSENGER_TO_PASSENGER':
+        return Colors.purple;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  // Get the passenger ID for actions (warnings/bans)
+  int? getPassengerId() {
+    if (widget.complaint['type'] == 'DRIVER_COMPLAINT' || 
+        widget.complaint['type'] == 'PASSENGER_TO_PASSENGER') {
+      return widget.complaint['passenger']?['id'];
+    }
+    return null; // PASSENGER_TO_DRIVER doesn't have a passenger to ban
+  }
+
+  String getPassengerName() {
+    if (widget.complaint['type'] == 'DRIVER_COMPLAINT' || 
+        widget.complaint['type'] == 'PASSENGER_TO_PASSENGER') {
+      return widget.complaint['passenger']?['name'] ?? 'Unknown';
+    }
+    return 'N/A';
+  }
+
   Future<void> _sendWarning() async {
+    final passengerId = getPassengerId();
+    if (passengerId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cannot send warning for this complaint type')),
+      );
+      return;
+    }
+
     if (_messageController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter a warning message')),
@@ -37,21 +128,35 @@ class _ComplaintDetailsPageState extends State<ComplaintDetailsPage> {
         },
         body: jsonEncode({
           'complaintId': widget.complaint['id'],
-          'passengerId': widget.complaint['passenger']['id'],
+          'passengerId': passengerId,
           'message': _messageController.text,
         }),
       );
 
       if (response.statusCode == 200) {
-        Navigator.pop(context, 'refresh');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Warning sent to passenger'), backgroundColor: Colors.orange),
-        );
+        if (mounted) {
+          Navigator.pop(context, 'refresh');
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Warning sent to passenger'), backgroundColor: Colors.orange),
+          );
+        }
+      } else {
+        final error = jsonDecode(response.body);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(error['error'] ?? 'Failed to send warning')),
+          );
+        }
       }
     } catch (e) {
       print('Error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
     } finally {
-      setState(() => isProcessing = false);
+      if (mounted) setState(() => isProcessing = false);
     }
   }
 
@@ -69,19 +174,41 @@ class _ComplaintDetailsPageState extends State<ComplaintDetailsPage> {
       );
 
       if (response.statusCode == 200) {
-        Navigator.pop(context, 'refresh');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Complaint marked as ${status.toLowerCase()}')),
-        );
+        if (mounted) {
+          Navigator.pop(context, 'refresh');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Complaint marked as ${status.toLowerCase()}')),
+          );
+        }
+      } else {
+        final error = jsonDecode(response.body);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(error['error'] ?? 'Failed to update status')),
+          );
+        }
       }
     } catch (e) {
       print('Error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
     } finally {
-      setState(() => isProcessing = false);
+      if (mounted) setState(() => isProcessing = false);
     }
   }
 
   Future<void> _banPassenger({required bool permanent}) async {
+    final passengerId = getPassengerId();
+    if (passengerId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cannot ban for this complaint type')),
+      );
+      return;
+    }
+
     setState(() => isProcessing = true);
 
     try {
@@ -93,29 +220,50 @@ class _ComplaintDetailsPageState extends State<ComplaintDetailsPage> {
         },
         body: jsonEncode({
           'complaintId': widget.complaint['id'],
-          'passengerId': widget.complaint['passenger']['id'],
+          'passengerId': passengerId,
           'duration': permanent ? 'permanent' : 'temporary',
           'reason': _messageController.text.isEmpty ? 'Violation of platform rules' : _messageController.text,
         }),
       );
 
       if (response.statusCode == 200) {
-        Navigator.pop(context, 'refresh');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(permanent ? 'Passenger permanently banned' : 'Passenger banned for 7 days'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        if (mounted) {
+          Navigator.pop(context, 'refresh');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(permanent ? 'Passenger permanently banned' : 'Passenger banned for 7 days'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } else {
+        final error = jsonDecode(response.body);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(error['error'] ?? 'Failed to ban passenger')),
+          );
+        }
       }
     } catch (e) {
       print('Error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
     } finally {
-      setState(() => isProcessing = false);
+      if (mounted) setState(() => isProcessing = false);
     }
   }
 
   void _showWarningDialog() {
+    if (getPassengerId() == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cannot send warning for this complaint type')),
+      );
+      return;
+    }
+
     _messageController.clear();
     showDialog(
       context: context,
@@ -124,7 +272,7 @@ class _ComplaintDetailsPageState extends State<ComplaintDetailsPage> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Passenger: ${widget.complaint['passenger']['name']}'),
+            Text('Passenger: ${getPassengerName()}'),
             const SizedBox(height: 12),
             TextField(
               controller: _messageController,
@@ -152,6 +300,13 @@ class _ComplaintDetailsPageState extends State<ComplaintDetailsPage> {
   }
 
   void _showBanDialog({required bool permanent}) {
+    if (getPassengerId() == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cannot ban for this complaint type')),
+      );
+      return;
+    }
+
     _messageController.clear();
     showDialog(
       context: context,
@@ -160,7 +315,7 @@ class _ComplaintDetailsPageState extends State<ComplaintDetailsPage> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Passenger: ${widget.complaint['passenger']['name']}'),
+            Text('Passenger: ${getPassengerName()}'),
             const SizedBox(height: 12),
             TextField(
               controller: _messageController,
@@ -197,6 +352,7 @@ class _ComplaintDetailsPageState extends State<ComplaintDetailsPage> {
       'DISMISSED': Colors.grey,
     };
     final statusColor = statusColors[complaint['status']] ?? Colors.grey;
+    final complaintTypeColor = getComplaintTypeColor();
 
     return Scaffold(
       appBar: AppBar(
@@ -209,6 +365,54 @@ class _ComplaintDetailsPageState extends State<ComplaintDetailsPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Complaint Type Card
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: complaintTypeColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: complaintTypeColor.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  Icon(getComplaintIcon(), color: complaintTypeColor, size: 28),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Complaint Type', style: TextStyle(fontSize: 12)),
+                        Text(
+                          getComplaintTypeText(),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: complaintTypeColor,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: complaint['severity'] == 'HIGH'
+                          ? Colors.red
+                          : complaint['severity'] == 'MEDIUM'
+                              ? Colors.orange
+                              : Colors.green,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      complaint['severity'],
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
             // Status Card
             Container(
               padding: const EdgeInsets.all(16),
@@ -236,47 +440,44 @@ class _ComplaintDetailsPageState extends State<ComplaintDetailsPage> {
                       ],
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: complaint['severity'] == 'HIGH'
-                          ? Colors.red
-                          : complaint['severity'] == 'MEDIUM'
-                              ? Colors.orange
-                              : Colors.green,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      complaint['severity'],
-                      style: const TextStyle(color: Colors.white, fontSize: 12),
-                    ),
-                  ),
                 ],
               ),
             ),
             const SizedBox(height: 20),
 
-            // Passenger Info
-            _buildSection('Passenger Information', [
-              _buildInfoRow('Name', complaint['passenger']['name']),
-              _buildInfoRow('Email', complaint['passenger']['email']),
-              _buildInfoRow('Phone', complaint['passenger']['phone'] ?? 'N/A'),
-              _buildInfoRow('Warning Count', complaint['passenger']['warningCount']?.toString() ?? '0'),
-              _buildInfoRow('Banned', complaint['passenger']['isBanned'] ? 'Yes' : 'No'),
+            // Parties Involved
+            _buildSection('Parties Involved', [
+              _buildInfoRow('Complainant', getComplainant()),
+              const SizedBox(height: 4),
+              _buildInfoRow('Accused', getAccused()),
             ]),
             const SizedBox(height: 16),
 
-            // Driver Info
-            _buildSection('Driver Information', [
-              _buildInfoRow('Name', complaint['driver']['name']),
-              _buildInfoRow('Email', complaint['driver']['email']),
-            ]),
+            // Passenger Info (only for relevant complaint types)
+            if (complaint['type'] == 'DRIVER_COMPLAINT' || complaint['type'] == 'PASSENGER_TO_PASSENGER')
+              _buildSection('Passenger Information', [
+                _buildInfoRow('Name', complaint['passenger']?['name'] ?? 'N/A'),
+                _buildInfoRow('Email', complaint['passenger']?['email'] ?? 'N/A'),
+                _buildInfoRow('Phone', complaint['passenger']?['phone'] ?? 'N/A'),
+                _buildInfoRow('Warning Count', complaint['passenger']?['warningCount']?.toString() ?? '0'),
+                _buildInfoRow('Banned', complaint['passenger']?['isBanned'] == true ? 'Yes' : 'No'),
+              ]),
+            
+            const SizedBox(height: 16),
+
+            // Driver Info (for relevant complaint types)
+            if (complaint['type'] == 'DRIVER_COMPLAINT' || complaint['type'] == 'PASSENGER_TO_DRIVER')
+              _buildSection('Driver Information', [
+                _buildInfoRow('Name', complaint['driver']?['name'] ?? 'N/A'),
+                _buildInfoRow('Email', complaint['driver']?['email'] ?? 'N/A'),
+              ]),
+            
             const SizedBox(height: 16),
 
             // Ride Info
             _buildSection('Ride Information', [
-              _buildInfoRow('Route', '${complaint['ride']['origin']} → ${complaint['ride']['destination']}'),
-              _buildInfoRow('Date', complaint['ride']['departureTime']?.toString().substring(0, 10) ?? 'N/A'),
+              _buildInfoRow('Route', '${complaint['ride']?['origin'] ?? 'N/A'} → ${complaint['ride']?['destination'] ?? 'N/A'}'),
+              _buildInfoRow('Date', complaint['ride']?['departureTime']?.toString().substring(0, 10) ?? 'N/A'),
             ]),
             const SizedBox(height: 16),
 

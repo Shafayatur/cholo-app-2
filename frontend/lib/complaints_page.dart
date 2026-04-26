@@ -160,89 +160,123 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
     );
   }
 
-  Widget _buildComplaintCard(dynamic complaint) {
-    final statusColors = {
-      'PENDING': Colors.orange,
-      'REVIEWED': Colors.blue,
-      'RESOLVED': Colors.green,
-      'DISMISSED': Colors.red,
-    };
-    
-    final statusColor = statusColors[complaint['status']] ?? Colors.grey;
-    
-    return Card(
-        margin: const EdgeInsets.only(bottom: 12),
-        child: InkWell(  // CHANGE: Wrap with InkWell instead of ExpansionTile
-        onTap: () async {
-            final result = await Navigator.push(
-            context,
-            MaterialPageRoute(
-                builder: (context) => ComplaintDetailsPage(complaint: complaint),
-            ),
-            );
-            if (result == 'refresh') {
-            fetchComplaints(); // Refresh list after action
-            }
-        },
-        child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-            children: [
-                // Keep the same UI as before but simplified for the list
-                Row(
-                children: [
-                    CircleAvatar(
-                    backgroundColor: statusColor.withOpacity(0.1),
-                    child: Icon(Icons.report_problem, color: statusColor),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                    child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                        Text(
-                            'Complaint #${complaint['id']}',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        Text(
-                            'Against: ${complaint['passenger']['name']}',
-                            style: const TextStyle(fontSize: 12),
-                        ),
-                        ],
-                    ),
-                    ),
-                    Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                        color: statusColor.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                        complaint['status'],
-                        style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: statusColor,
-                        ),
-                    ),
-                    ),
-                    const Icon(Icons.chevron_right),
-                ],
+Widget _buildComplaintCard(dynamic complaint) {
+  final statusColors = {
+    'PENDING': Colors.orange,
+    'REVIEWED': Colors.blue,
+    'RESOLVED': Colors.green,
+    'DISMISSED': Colors.red,
+  };
+  
+  final statusColor = statusColors[complaint['status']] ?? Colors.grey;
+  
+  // Determine complaint type and display text
+  String complaintTypeText = '';
+  IconData complaintIcon = Icons.report_problem;
+  Color complaintTypeColor = Colors.grey;
+  String againstText = '';
+  
+  switch (complaint['type']) {
+    case 'DRIVER_COMPLAINT':
+      complaintTypeText = 'Driver → Passenger';
+      complaintIcon = Icons.drive_eta;
+      complaintTypeColor = Colors.blue;
+      againstText = 'Against: ${complaint['passenger']?['name'] ?? 'Unknown'}';
+      break;
+    case 'PASSENGER_TO_DRIVER':
+      complaintTypeText = 'Passenger → Driver';
+      complaintIcon = Icons.person;
+      complaintTypeColor = Colors.orange;
+      againstText = 'Against: Driver (${complaint['driver']?['name'] ?? 'Unknown'})';
+      break;
+    case 'PASSENGER_TO_PASSENGER':
+      complaintTypeText = 'Passenger → Passenger';
+      complaintIcon = Icons.people;
+      complaintTypeColor = Colors.purple;
+      againstText = 'Against: ${complaint['passenger']?['name'] ?? 'Unknown'}';
+      break;
+    default:
+      complaintTypeText = complaint['type'] ?? 'Unknown';
+      complaintIcon = Icons.report_problem;
+      complaintTypeColor = Colors.grey;
+      againstText = 'Against: ${complaint['passenger']?['name'] ?? 'Unknown'}';
+  }
+  
+  return Card(
+    margin: const EdgeInsets.only(bottom: 12),
+    child: InkWell(
+      onTap: () async {
+        final result = await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ComplaintDetailsPage(complaint: complaint),
+          ),
+        );
+        if (result == 'refresh') {
+          fetchComplaints();
+        }
+      },
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor: complaintTypeColor.withOpacity(0.1),
+                  child: Icon(complaintIcon, color: complaintTypeColor),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                complaint['description'],
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Complaint #${complaint['id']}',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        complaintTypeText,
+                        style: TextStyle(fontSize: 10, color: complaintTypeColor),
+                      ),
+                      Text(
+                        againstText,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ],
+                  ),
                 ),
-            ],
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    complaint['status'],
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: statusColor,
+                    ),
+                  ),
+                ),
+                const Icon(Icons.chevron_right),
+              ],
             ),
+            const SizedBox(height: 8),
+            Text(
+              complaint['description'],
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
         ),
-        ),
-    );
-    }
-
+      ),
+    ),
+  );
+}
   Widget _buildInfoRow(String label, String value) {
     return Row(
       children: [

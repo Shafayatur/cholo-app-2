@@ -351,11 +351,11 @@ class _PassengerRideDetailsState extends State<PassengerRideDetails> {
                           const SizedBox(height: 8),
                           ElevatedButton.icon(
                             onPressed: () => _showComplaintDialog(),
-                            icon: const Icon(Icons.report_problem),
-                            label: const Text('Report Driver'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red,
-                              minimumSize: const Size(double.infinity, 40),
+                            icon: const Icon(Icons.report_problem_outlined, size: 16),
+                                label: const Text('Report'),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.red,
+                                  side: const BorderSide(color: Colors.red),
                             ),
                           ),
                         ],
