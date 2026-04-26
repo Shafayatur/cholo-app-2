@@ -12,5 +12,7 @@ router.put("/:id/status", complaintController.updateComplaintStatus);
 router.post("/warnings", complaintController.sendWarning);
 router.post("/ban", complaintController.banPassenger);
 router.get("/passenger/:passengerId/history", complaintController.getPassengerHistory);
+router.post("/passenger-to-driver", complaintController.filePassengerToDriverComplaint);
+router.post("/passenger-to-passenger", complaintController.filePassengerToPassengerComplaint);
 
 module.exports = router;

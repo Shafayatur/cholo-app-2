@@ -4,6 +4,7 @@ const rideController = require("../controllers/rideController");
 const prisma = require("../lib/prisma");
 
 router.post("/", rideController.createRide);
+router.get("/", rideController.getAllRides);
 router.put("/:id/route", rideController.updateRideRoute);
 router.put("/:id/start", rideController.startRide);
 router.put("/:id/cancel", rideController.cancelRide);

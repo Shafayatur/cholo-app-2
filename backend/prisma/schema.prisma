@@ -12,21 +12,21 @@ model User {
   name                String
   email               String           @unique
   password            String?
-  phone               String?
   role                Role             @default(PASSENGER)
-  warningCount        Int              @default(0)
-  isBanned            Boolean          @default(false)
-  banReason           String?
-  banExpiryDate       DateTime?
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
+  banExpiryDate       DateTime?
+  banReason           String?
+  isBanned            Boolean          @default(false)
+  phone               String?
+  warningCount        Int              @default(0)
   bookingRequests     BookingRequest[] @relation("PassengerBookings")
-  rides               Ride[]
-  seatBookings        SeatBooking[]
   driverComplaints    Complaint[]      @relation("DriverComplaints")
   passengerComplaints Complaint[]      @relation("PassengerComplaints")
-  warnings            Warning[]
   notifications       Notification[]
+  rides               Ride[]
+  seatBookings        SeatBooking[]
+  warnings            Warning[]
 }
 
 model Ride {
@@ -47,9 +47,9 @@ model Ride {
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
   bookingRequests  BookingRequest[]
+  complaints       Complaint[]
   driver           User             @relation(fields: [driverId], references: [id])
   seatBookings     SeatBooking[]
-  complaints       Complaint[]
 }
 
 model BookingRequest {
@@ -79,6 +79,56 @@ model SeatBooking {
   user          User      @relation(fields: [userId], references: [id])
 }
 
+model Complaint {
+  id          Int       @id @default(autoincrement())
+  driverId    Int
+  passengerId Int
+  rideId      Int
+  title       String
+  description String
+  severity    String    @default("MEDIUM")
+  status      String    @default("PENDING")
+  type        String    @default("DRIVER_COMPLAINT")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  driver      User      @relation("DriverComplaints", fields: [driverId], references: [id])
+  passenger   User      @relation("PassengerComplaints", fields: [passengerId], references: [id])
+  ride        Ride      @relation(fields: [rideId], references: [id])
+  warnings    Warning[]
+
+  @@index([driverId])
+  @@index([passengerId])
+  @@index([rideId])
+  @@index([status])
+}
+
+model Warning {
+  id          Int       @id @default(autoincrement())
+  passengerId Int
+  complaintId Int
+  message     String
+  issuedBy    Int
+  createdAt   DateTime  @default(now())
+  complaint   Complaint @relation(fields: [complaintId], references: [id])
+  passenger   User      @relation(fields: [passengerId], references: [id])
+
+  @@index([passengerId])
+  @@index([complaintId])
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  type      String   @default("INFO")
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
 enum Role {
   PASSENGER
   DRIVER
@@ -96,56 +146,4 @@ enum BookingStatus {
   PENDING
   ACCEPTED
   REJECTED
-}
-
-model Complaint {
-  id          Int      @id @default(autoincrement())
-  driverId    Int
-  passengerId Int
-  rideId      Int
-  title       String
-  description String
-  severity    String   @default("MEDIUM") // LOW, MEDIUM, HIGH
-  status      String   @default("PENDING") // PENDING, REVIEWED, RESOLVED, DISMISSED
-  type        String   @default("DRIVER_COMPLAINT") // DRIVER_COMPLAINT, PASSENGER_COMPLAINT, SYSTEM_ISSUE
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  driver    User      @relation("DriverComplaints", fields: [driverId], references: [id])
-  passenger User      @relation("PassengerComplaints", fields: [passengerId], references: [id])
-  ride      Ride      @relation(fields: [rideId], references: [id])
-  warnings  Warning[]
-
-  @@index([driverId])
-  @@index([passengerId])
-  @@index([rideId])
-  @@index([status])
-}
-
-model Warning {
-  id          Int      @id @default(autoincrement())
-  passengerId Int
-  complaintId Int
-  message     String
-  issuedBy    Int // Admin ID who issued the warning
-  createdAt   DateTime @default(now())
-
-  passenger User      @relation(fields: [passengerId], references: [id])
-  complaint Complaint @relation(fields: [complaintId], references: [id])
-
-  @@index([passengerId])
-  @@index([complaintId])
-}
-model Notification {
-  id        Int      @id @default(autoincrement())
-  userId    Int
-  title     String
-  message   String
-  isRead    Boolean  @default(false)
-  type      String   @default("INFO") // INFO, WARNING, SUCCESS, DANGER
-  createdAt DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id])
-
-  @@index([userId])
 }

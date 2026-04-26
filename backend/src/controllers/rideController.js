@@ -1,5 +1,25 @@
 const prisma = require("../lib/prisma");
 
+exports.getAllRides = async (req, res) => {
+  try {
+    const rides = await prisma.ride.findMany({
+      include: {
+        driver: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+      orderBy: { departureTime: "asc" },
+    });
+    res.json({ rides });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 exports.createRide = async (req, res) => {
   try {
     const {

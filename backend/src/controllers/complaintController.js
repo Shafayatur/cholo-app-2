@@ -150,7 +150,7 @@ exports.updateComplaintStatus = async (req, res) => {
 // NEW METHOD: Send warning to passenger
 exports.sendWarning = async (req, res) => {
     const { complaintId, passengerId, message } = req.body;
-    
+
     // Extract adminId from Authorization header
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -255,7 +255,7 @@ exports.banPassenger = async (req, res) => {
 
         // 3. Create Notifications
         const banMsg = duration === "permanent" ? "permanently banned" : "banned for 7 days";
-        
+
         // Notify Passenger
         await createNotification(
             passengerId,
@@ -312,5 +312,86 @@ exports.getPassengerHistory = async (req, res) => {
     } catch (err) {
         console.error(err);
         return res.status(500).json({ error: "Failed to fetch passenger history" });
+    }
+};
+
+// Passenger to Driver Complaint
+exports.filePassengerToDriverComplaint = async (req, res) => {
+    const { passengerId, driverId, rideId, description, severity } = req.body;
+
+    try {
+        const complaint = await prisma.complaint.create({
+            data: {
+                driverId: Number(driverId),
+                passengerId: Number(passengerId),
+                rideId: Number(rideId),
+                title: `Passenger complaint against driver`,
+                description: description,
+                severity: severity || "MEDIUM",
+                type: "PASSENGER_TO_DRIVER",
+                status: "PENDING",
+            },
+            include: {
+                driver: { select: { name: true, email: true } },
+                passenger: { select: { name: true, email: true } },
+                ride: { select: { origin: true, destination: true } },
+            },
+        });
+
+        // Notify driver
+        await createNotification(
+            driverId,
+            "Complaint Filed Against You",
+            `A passenger has filed a complaint against you. Admin will review it.`,
+            "WARNING"
+        );
+
+        return res.status(201).json({
+            message: "Complaint filed successfully",
+            complaint: complaint,
+        });
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: "Failed to file complaint" });
+    }
+};
+
+// Passenger to Passenger Complaint
+exports.filePassengerToPassengerComplaint = async (req, res) => {
+    const { complainantId, accusedId, rideId, description, severity, seatNo, timeRange } = req.body;
+
+    try {
+        const complaint = await prisma.complaint.create({
+            data: {
+                driverId: null,
+                passengerId: Number(accusedId),
+                rideId: Number(rideId),
+                title: `Passenger complaint against passenger`,
+                description: description,
+                severity: severity || "MEDIUM",
+                type: "PASSENGER_TO_PASSENGER",
+                status: "PENDING",
+            },
+            include: {
+                passenger: { select: { name: true, email: true } },
+                ride: { select: { origin: true, destination: true } },
+            },
+        });
+
+        // Notify accused passenger
+        await createNotification(
+            accusedId,
+            "Complaint Filed Against You",
+            `A fellow passenger has filed a complaint against you. Admin will review it.`,
+            "WARNING"
+        );
+
+        return res.status(201).json({
+            message: "Complaint filed successfully",
+            complaint: complaint,
+        });
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: "Failed to file complaint" });
     }
 };

@@ -5,6 +5,7 @@ import 'SeatSelectionPage.dart';
 import 'login_screen.dart';
 import 'session.dart';
 import 'backend_config.dart';
+import 'passenger_rides_list.dart';
 
 class UserPanel extends StatefulWidget {
   const UserPanel({Key? key}) : super(key: key);
@@ -274,7 +275,12 @@ class _UserPanelState extends State<UserPanel> {
             ),
             const SizedBox(width: 16),
             Expanded(
-              child: _buildActionButton('My Rides', Icons.history, () {}),
+              child: _buildActionButton('My Rides', Icons.history, () {
+                Navigator.push(
+                  context, 
+                  MaterialPageRoute(builder: (_) => PassengerRidesList())
+                );
+              }),
             ),
           ],
         ),
