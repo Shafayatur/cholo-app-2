@@ -1,10 +1,58 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'SeatSelectionPage.dart';
 import 'login_screen.dart';
 import 'session.dart';
+import 'backend_config.dart';
 
-class UserPanel extends StatelessWidget {
+class UserPanel extends StatefulWidget {
   const UserPanel({Key? key}) : super(key: key);
+
+  @override
+  State<UserPanel> createState() => _UserPanelState();
+}
+
+class _UserPanelState extends State<UserPanel> {
+  List<dynamic> notifications = [];
+  bool isLoading = true;
+  Map<String, dynamic>? userData;
+
+  @override
+  void initState() {
+    super.initState();
+    fetchData();
+  }
+
+  Future<void> fetchData() async {
+    if (Session.userId == null) return;
+    
+    setState(() => isLoading = true);
+    try {
+      // Fetch notifications
+      final notifRes = await http.get(
+        Uri.parse('$backendUrl/api/notifications/user/${Session.userId}'),
+      );
+      
+      // Fetch user data (to check ban status/warning count)
+      // We might need a generic user endpoint, for now let's use passenger history 
+      // or just assume we have an endpoint for user profile
+      final userRes = await http.get(
+        Uri.parse('$backendUrl/api/complaints/passenger/${Session.userId}/history'),
+      );
+
+      if (notifRes.statusCode == 200 && userRes.statusCode == 200) {
+        setState(() {
+          notifications = jsonDecode(notifRes.body)['notifications'];
+          userData = jsonDecode(userRes.body);
+          isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('Error fetching user data: $e');
+      setState(() => isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -21,137 +69,174 @@ class UserPanel extends StatelessWidget {
         ),
         centerTitle: true,
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: fetchData,
+          ),
+        ],
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 40.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Image.asset('assets/cholo_logo.png', height: 80),
-              const SizedBox(height: 40),
-
-              Text(
-                'Welcome to Cholo',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: darkText,
-                ),
-                textAlign: TextAlign.center,
-              ),
-
-              const SizedBox(height: 16),
-
-              Text(
-                'Find and book rides with ease',
-                style: TextStyle(fontSize: 16, color: Colors.grey),
-                textAlign: TextAlign.center,
-              ),
-
-              const SizedBox(height: 48),
-
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade50,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: brandOrange.withOpacity(0.2)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Available Features',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: darkText,
+        child: isLoading 
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Ban/Warning Alert
+                  if (userData != null && (userData!['totalWarnings'] > 0 || userData!['isBanned'] == true))
+                    _buildStatusAlert(),
+                  
+                  const SizedBox(height: 20),
+                  
+                  // Notifications Section
+                  if (notifications.isNotEmpty) ...[
+                    const Text(
+                      'Notifications',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 12),
+                    ...notifications.take(3).map((n) => _buildNotificationCard(n)),
+                    if (notifications.length > 3)
+                      TextButton(
+                        onPressed: () {}, // TODO: View all notifications
+                        child: const Text('View All Notifications'),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    _buildFeatureItem(
-                      'Book a Ride',
-                      'Find and book rides to your destination',
-                    ),
-                    _buildFeatureItem(
-                      'Ride History',
-                      'View your past rides and bookings',
-                    ),
-                    _buildFeatureItem(
-                      'Payment Methods',
-                      'Manage your payment options',
-                    ),
-                    _buildFeatureItem(
-                      'Profile Settings',
-                      'Update your personal information',
-                    ),
-                    _buildFeatureItem(
-                      'Support',
-                      'Get help and contact support',
-                    ),
+                    const SizedBox(height: 20),
                   ],
-                ),
-              ),
 
-              const SizedBox(height: 32),
+                  Image.asset('assets/cholo_logo.png', height: 60),
+                  const SizedBox(height: 20),
 
-              Text(
-                'Quick Actions',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: darkText,
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildActionButton(
-                      'Book Ride',
-                      Icons.directions_car,
-                      () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => SeatSelectionPage(rideId: 1),
-                          ),
-                        );
-                      },
-                    ),
+                  Text(
+                    'Welcome back!',
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: darkText),
+                    textAlign: TextAlign.center,
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _buildActionButton('My Rides', Icons.history, () {}),
+
+                  const SizedBox(height: 32),
+
+                  _buildFeatureSection(brandOrange, darkText),
+
+                  const SizedBox(height: 32),
+
+                  const Text(
+                    'Quick Actions',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF2C323A)),
                   ),
+
+                  const SizedBox(height: 16),
+
+                  _buildQuickActions(context),
                 ],
               ),
+            ),
+      ),
+    );
+  }
 
-              const SizedBox(height: 16),
-
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildActionButton('Profile', Icons.person, () {}),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _buildActionButton('Logout', Icons.logout, () {
-                      Session.userId = null;
-                      Navigator.of(context).pushAndRemoveUntil(
-                        MaterialPageRoute(builder: (_) => const LoginScreen()),
-                        (route) => false,
-                      );
-                    }),
-                  ),
-                ],
-              ),
-            ],
+  Widget _buildStatusAlert() {
+    bool isBanned = userData?['isBanned'] ?? false;
+    int warnings = userData?['totalWarnings'] ?? 0;
+    
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isBanned ? Colors.red.shade50 : Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: isBanned ? Colors.red : Colors.orange),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isBanned ? Icons.block : Icons.warning_amber_rounded,
+            color: isBanned ? Colors.red : Colors.orange,
           ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isBanned ? 'ACCOUNT BANNED' : 'ACCOUNT WARNING',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: isBanned ? Colors.red : Colors.orange.shade900,
+                  ),
+                ),
+                Text(
+                  isBanned 
+                    ? 'Your account has been suspended due to violations.'
+                    : 'You have $warnings warning(s). Please follow platform rules.',
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNotificationCard(dynamic n) {
+    IconData icon = Icons.info_outline;
+    Color color = Colors.blue;
+    
+    if (n['type'] == 'WARNING') {
+      icon = Icons.warning_amber_rounded;
+      color = Colors.orange;
+    } else if (n['type'] == 'DANGER') {
+      icon = Icons.error_outline;
+      color = Colors.red;
+    } else if (n['type'] == 'SUCCESS') {
+      icon = Icons.check_circle_outline;
+      color = Colors.green;
+    }
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: color.withOpacity(0.1),
+          child: Icon(icon, color: color, size: 20),
         ),
+        title: Text(n['title'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+        subtitle: Text(n['message'], style: const TextStyle(fontSize: 12)),
+        trailing: Text(
+          n['createdAt'].toString().substring(5, 10),
+          style: const TextStyle(fontSize: 10, color: Colors.grey),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFeatureSection(Color brandOrange, Color darkText) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: brandOrange.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Available Features',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: darkText),
+          ),
+          const SizedBox(height: 16),
+          _buildFeatureItem('Book a Ride', 'Find and book rides to your destination'),
+          _buildFeatureItem('Ride History', 'View your past rides and bookings'),
+          _buildFeatureItem('Payment Methods', 'Manage your payment options'),
+          _buildFeatureItem('Profile Settings', 'Update your personal information'),
+        ],
       ),
     );
   }
@@ -167,17 +252,8 @@ class UserPanel extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 16,
-                  ),
-                ),
-                Text(
-                  description,
-                  style: TextStyle(color: Colors.grey, fontSize: 14),
-                ),
+                Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                Text(description, style: const TextStyle(color: Colors.grey, fontSize: 14)),
               ],
             ),
           ),
@@ -186,17 +262,49 @@ class UserPanel extends StatelessWidget {
     );
   }
 
-  Widget _buildActionButton(
-    String title,
-    IconData icon,
-    VoidCallback onPressed,
-  ) {
-    const Color brandOrange = Color(0xFFF98825);
+  Widget _buildQuickActions(BuildContext context) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _buildActionButton('Book Ride', Icons.directions_car, () {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => SeatSelectionPage(rideId: 1)));
+              }),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: _buildActionButton('My Rides', Icons.history, () {}),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: _buildActionButton('Profile', Icons.person, () {}),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: _buildActionButton('Logout', Icons.logout, () {
+                Session.userId = null;
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  (route) => false,
+                );
+              }),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
 
+  Widget _buildActionButton(String title, IconData icon, VoidCallback onPressed) {
     return ElevatedButton(
       onPressed: onPressed,
       style: ElevatedButton.styleFrom(
-        backgroundColor: brandOrange,
+        backgroundColor: const Color(0xFFF98825),
         foregroundColor: Colors.white,
         padding: const EdgeInsets.symmetric(vertical: 16),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -207,10 +315,7 @@ class UserPanel extends StatelessWidget {
         children: [
           Icon(icon, size: 24),
           const SizedBox(height: 4),
-          Text(
-            title,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-          ),
+          Text(title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
         ],
       ),
     );

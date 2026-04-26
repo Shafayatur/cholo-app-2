@@ -1,5 +1,22 @@
 const prisma = require("../lib/prisma");
 
+// Helper to create notifications
+const createNotification = async (userId, title, message, type = "INFO") => {
+    try {
+        await prisma.notification.create({
+            data: {
+                userId: Number(userId),
+                title,
+                message,
+                type
+            }
+        });
+    } catch (err) {
+        console.error("Failed to create notification:", err);
+    }
+};
+
+// Existing fileComplaint method (keep as is)
 exports.fileComplaint = async (req, res) => {
     const { driverId, passengerId, rideId, description, severity } = req.body;
 
@@ -36,6 +53,7 @@ exports.fileComplaint = async (req, res) => {
     }
 };
 
+// Existing getComplaints method (keep as is)
 exports.getComplaints = async (req, res) => {
     const { status, type, driverId, passengerId } = req.query;
 
@@ -49,8 +67,8 @@ exports.getComplaints = async (req, res) => {
         const complaints = await prisma.complaint.findMany({
             where,
             include: {
-                driver: { select: { id: true, name: true, email: true } },
-                passenger: { select: { id: true, name: true, email: true } },
+                driver: { select: { id: true, name: true, email: true, phone: true } },
+                passenger: { select: { id: true, name: true, email: true, phone: true, warningCount: true, isBanned: true } },
                 ride: { select: { id: true, origin: true, destination: true, departureTime: true } },
             },
             orderBy: { createdAt: "desc" },
@@ -63,6 +81,7 @@ exports.getComplaints = async (req, res) => {
     }
 };
 
+// Existing getComplaintById (keep as is)
 exports.getComplaintById = async (req, res) => {
     const complaintId = Number(req.params.id);
 
@@ -70,8 +89,8 @@ exports.getComplaintById = async (req, res) => {
         const complaint = await prisma.complaint.findUnique({
             where: { id: complaintId },
             include: {
-                driver: { select: { id: true, name: true, email: true } },
-                passenger: { select: { id: true, name: true, email: true } },
+                driver: { select: { id: true, name: true, email: true, phone: true } },
+                passenger: { select: { id: true, name: true, email: true, phone: true, warningCount: true, isBanned: true } },
                 ride: { select: { id: true, origin: true, destination: true, departureTime: true } },
             },
         });
@@ -87,9 +106,10 @@ exports.getComplaintById = async (req, res) => {
     }
 };
 
+// Existing updateComplaintStatus (keep as is)
 exports.updateComplaintStatus = async (req, res) => {
     const complaintId = Number(req.params.id);
-    const { status, adminNotes } = req.body;
+    const { status } = req.body;
 
     const validStatuses = ["PENDING", "REVIEWED", "RESOLVED", "DISMISSED"];
     if (!validStatuses.includes(status)) {
@@ -104,10 +124,18 @@ exports.updateComplaintStatus = async (req, res) => {
                 updatedAt: new Date(),
             },
             include: {
-                driver: { select: { name: true, email: true } },
+                driver: { select: { id: true, name: true, email: true } },
                 passenger: { select: { name: true, email: true } },
             },
         });
+
+        // Notify Driver
+        await createNotification(
+            complaint.driver.id,
+            "Complaint Update",
+            `Your complaint against ${complaint.passenger.name} has been marked as ${status.toLowerCase()}.`,
+            status === "RESOLVED" ? "SUCCESS" : "INFO"
+        );
 
         return res.json({
             message: `Complaint ${status.toLowerCase()} successfully`,
@@ -116,5 +144,173 @@ exports.updateComplaintStatus = async (req, res) => {
     } catch (err) {
         console.error(err);
         return res.status(500).json({ error: "Internal server error" });
+    }
+};
+
+// NEW METHOD: Send warning to passenger
+exports.sendWarning = async (req, res) => {
+    const { complaintId, passengerId, message } = req.body;
+    
+    // Extract adminId from Authorization header
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: "Unauthorized" });
+    }
+    const adminId = authHeader.split(' ')[1];
+
+    try {
+        // Create warning record
+        const warning = await prisma.warning.create({
+            data: {
+                passengerId: Number(passengerId),
+                complaintId: Number(complaintId),
+                message: message,
+                issuedBy: Number(adminId),
+            },
+        });
+
+        // Increment passenger's warning count
+        await prisma.user.update({
+            where: { id: Number(passengerId) },
+            data: { warningCount: { increment: 1 } },
+        });
+
+        // Update complaint status to REVIEWED
+        const updatedComplaint = await prisma.complaint.update({
+            where: { id: Number(complaintId) },
+            data: { status: "REVIEWED" },
+            include: {
+                driver: { select: { id: true } },
+                passenger: { select: { name: true } }
+            }
+        });
+
+        // Notify Passenger
+        await createNotification(
+            passengerId,
+            "Official Warning",
+            `You have received an official warning: ${message}`,
+            "WARNING"
+        );
+
+        // Notify Driver
+        await createNotification(
+            updatedComplaint.driver.id,
+            "Complaint Reviewed",
+            `Your complaint against ${updatedComplaint.passenger.name} has been reviewed and a warning has been issued.`,
+            "SUCCESS"
+        );
+
+        return res.json({
+            message: "Warning sent successfully",
+            warning: warning,
+        });
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: "Failed to send warning" });
+    }
+};
+
+// NEW METHOD: Ban passenger
+exports.banPassenger = async (req, res) => {
+    const { passengerId, duration, reason, complaintId } = req.body;
+    console.log(`Banning passenger ${passengerId} for complaint ${complaintId}. Duration: ${duration}`);
+
+    try {
+        let banExpiryDate = null;
+        let isPermanent = false;
+
+        if (duration === "temporary") {
+            // 7 days ban
+            banExpiryDate = new Date();
+            banExpiryDate.setDate(banExpiryDate.getDate() + 7);
+        } else if (duration === "permanent") {
+            isPermanent = true;
+            banExpiryDate = null;
+        }
+
+        // 1. Update User Record
+        await prisma.user.update({
+            where: { id: Number(passengerId) },
+            data: {
+                isBanned: true,
+                banReason: reason,
+                banExpiryDate: banExpiryDate,
+            },
+        });
+
+        // 2. Update Complaint Status
+        let updatedComplaint;
+        if (complaintId) {
+            updatedComplaint = await prisma.complaint.update({
+                where: { id: Number(complaintId) },
+                data: { status: "RESOLVED" },
+                include: {
+                    driver: { select: { id: true } },
+                    passenger: { select: { name: true } }
+                }
+            });
+            console.log(`Complaint ${complaintId} status updated to RESOLVED`);
+        }
+
+        // 3. Create Notifications
+        const banMsg = duration === "permanent" ? "permanently banned" : "banned for 7 days";
+        
+        // Notify Passenger
+        await createNotification(
+            passengerId,
+            "Account Sanction",
+            `Your account has been ${banMsg} due to: ${reason}`,
+            "DANGER"
+        );
+
+        // Notify Driver (if complaint exists)
+        if (updatedComplaint) {
+            await createNotification(
+                updatedComplaint.driver.id,
+                "Complaint Resolved",
+                `Your complaint against ${updatedComplaint.passenger.name} has been resolved. The passenger has been ${banMsg}.`,
+                "SUCCESS"
+            );
+        }
+
+        return res.json({
+            message: duration === "permanent" ? "Passenger permanently banned" : "Passenger banned for 7 days",
+            status: "RESOLVED"
+        });
+    } catch (err) {
+        console.error("Error in banPassenger:", err);
+        return res.status(500).json({ error: "Failed to ban passenger", details: err.message });
+    }
+};
+
+// NEW METHOD: Get passenger complaint history
+exports.getPassengerHistory = async (req, res) => {
+    const passengerId = Number(req.params.passengerId);
+
+    try {
+        const complaints = await prisma.complaint.findMany({
+            where: { passengerId: passengerId },
+            include: {
+                driver: { select: { name: true } },
+                ride: { select: { origin: true, destination: true, departureTime: true } },
+            },
+            orderBy: { createdAt: "desc" },
+        });
+
+        const warnings = await prisma.warning.findMany({
+            where: { passengerId: passengerId },
+            include: { complaint: true },
+        });
+
+        return res.json({
+            complaints: complaints,
+            warnings: warnings,
+            totalComplaints: complaints.length,
+            totalWarnings: warnings.length,
+        });
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: "Failed to fetch passenger history" });
     }
 };

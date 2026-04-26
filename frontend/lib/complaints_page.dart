@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'session.dart';
 import 'backend_config.dart';
+import 'complaint_details_page.dart';
 
 class ComplaintsPage extends StatefulWidget {
   const ComplaintsPage({Key? key}) : super(key: key);
@@ -170,111 +171,77 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
     final statusColor = statusColors[complaint['status']] ?? Colors.grey;
     
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: ExpansionTile(
-        leading: CircleAvatar(
-          backgroundColor: statusColor.withOpacity(0.1),
-          child: Icon(Icons.report_problem, color: statusColor),
-        ),
-        title: Text(
-          'Complaint #${complaint['id']}',
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        subtitle: Text(
-          'Against: ${complaint['passenger']['name']}',
-          style: const TextStyle(fontSize: 12),
-        ),
-        trailing: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: statusColor.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Text(
-            complaint['status'],
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: statusColor,
+        margin: const EdgeInsets.only(bottom: 12),
+        child: InkWell(  // CHANGE: Wrap with InkWell instead of ExpansionTile
+        onTap: () async {
+            final result = await Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (context) => ComplaintDetailsPage(complaint: complaint),
             ),
-          ),
-        ),
-        children: [
-          Padding(
+            );
+            if (result == 'refresh') {
+            fetchComplaints(); // Refresh list after action
+            }
+        },
+        child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Complaint Details
-                _buildInfoRow('Driver', complaint['driver']['name']),
-                const SizedBox(height: 8),
-                _buildInfoRow('Passenger', complaint['passenger']['name']),
-                const SizedBox(height: 8),
-                _buildInfoRow('Ride', '${complaint['ride']['origin']} → ${complaint['ride']['destination']}'),
-                const SizedBox(height: 8),
-                _buildInfoRow('Severity', complaint['severity']),
-                const SizedBox(height: 12),
-                const Divider(),
-                const SizedBox(height: 8),
-                Text(
-                  'Complaint Details:',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  complaint['description'],
-                  style: const TextStyle(fontSize: 13, height: 1.4),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Filed: ${DateTime.parse(complaint['createdAt']).toString().substring(0, 16)}',
-                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-                ),
-                const SizedBox(height: 12),
-                
-                // Action Buttons (Admin only)
-                if (complaint['status'] == 'PENDING')
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () => updateComplaintStatus(complaint['id'], 'DISMISSED'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.red,
-                            side: const BorderSide(color: Colors.red),
-                          ),
-                          child: const Text('Dismiss'),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () => updateComplaintStatus(complaint['id'], 'REVIEWED'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.blue,
-                            side: const BorderSide(color: Colors.blue),
-                          ),
-                          child: const Text('Mark Reviewed'),
-                        ),
-                      ),
-                    ],
-                  ),
-                if (complaint['status'] == 'REVIEWED')
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: () => updateComplaintStatus(complaint['id'], 'RESOLVED'),
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                      child: const Text('Mark Resolved'),
+            children: [
+                // Keep the same UI as before but simplified for the list
+                Row(
+                children: [
+                    CircleAvatar(
+                    backgroundColor: statusColor.withOpacity(0.1),
+                    child: Icon(Icons.report_problem, color: statusColor),
                     ),
-                  ),
-              ],
+                    const SizedBox(width: 12),
+                    Expanded(
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                        Text(
+                            'Complaint #${complaint['id']}',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                            'Against: ${complaint['passenger']['name']}',
+                            style: const TextStyle(fontSize: 12),
+                        ),
+                        ],
+                    ),
+                    ),
+                    Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                        color: statusColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                        complaint['status'],
+                        style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: statusColor,
+                        ),
+                    ),
+                    ),
+                    const Icon(Icons.chevron_right),
+                ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                complaint['description'],
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+            ],
             ),
-          ),
-        ],
-      ),
+        ),
+        ),
     );
-  }
+    }
 
   Widget _buildInfoRow(String label, String value) {
     return Row(
