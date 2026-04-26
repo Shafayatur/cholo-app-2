@@ -49,8 +49,8 @@ exports.getComplaints = async (req, res) => {
         const complaints = await prisma.complaint.findMany({
             where,
             include: {
-                driver: { select: { id: true, name: true, email: true, phone: true } },
-                passenger: { select: { id: true, name: true, email: true, phone: true } },
+                driver: { select: { id: true, name: true, email: true } },
+                passenger: { select: { id: true, name: true, email: true } },
                 ride: { select: { id: true, origin: true, destination: true, departureTime: true } },
             },
             orderBy: { createdAt: "desc" },
@@ -70,8 +70,8 @@ exports.getComplaintById = async (req, res) => {
         const complaint = await prisma.complaint.findUnique({
             where: { id: complaintId },
             include: {
-                driver: { select: { id: true, name: true, email: true, phone: true } },
-                passenger: { select: { id: true, name: true, email: true, phone: true } },
+                driver: { select: { id: true, name: true, email: true } },
+                passenger: { select: { id: true, name: true, email: true } },
                 ride: { select: { id: true, origin: true, destination: true, departureTime: true } },
             },
         });
