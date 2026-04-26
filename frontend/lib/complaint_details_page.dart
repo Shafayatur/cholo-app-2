@@ -84,26 +84,30 @@ class _ComplaintDetailsPageState extends State<ComplaintDetailsPage> {
     }
   }
 
-  // Get the passenger ID for actions (warnings/bans)
-  int? getPassengerId() {
+  // Get the accused ID for actions (warnings/bans)
+  int? getAccusedId() {
     if (widget.complaint['type'] == 'DRIVER_COMPLAINT' || 
         widget.complaint['type'] == 'PASSENGER_TO_PASSENGER') {
       return widget.complaint['passenger']?['id'];
+    } else if (widget.complaint['type'] == 'PASSENGER_TO_DRIVER') {
+      return widget.complaint['driver']?['id'];
     }
-    return null; // PASSENGER_TO_DRIVER doesn't have a passenger to ban
+    return null;
   }
 
-  String getPassengerName() {
+  String getAccusedName() {
     if (widget.complaint['type'] == 'DRIVER_COMPLAINT' || 
         widget.complaint['type'] == 'PASSENGER_TO_PASSENGER') {
       return widget.complaint['passenger']?['name'] ?? 'Unknown';
+    } else if (widget.complaint['type'] == 'PASSENGER_TO_DRIVER') {
+      return widget.complaint['driver']?['name'] ?? 'Unknown Driver';
     }
     return 'N/A';
   }
 
   Future<void> _sendWarning() async {
-    final passengerId = getPassengerId();
-    if (passengerId == null) {
+    final accusedId = getAccusedId();
+    if (accusedId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Cannot send warning for this complaint type')),
       );
@@ -128,7 +132,7 @@ class _ComplaintDetailsPageState extends State<ComplaintDetailsPage> {
         },
         body: jsonEncode({
           'complaintId': widget.complaint['id'],
-          'passengerId': passengerId,
+          'userId': accusedId,
           'message': _messageController.text,
         }),
       );
@@ -137,7 +141,7 @@ class _ComplaintDetailsPageState extends State<ComplaintDetailsPage> {
         if (mounted) {
           Navigator.pop(context, 'refresh');
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Warning sent to passenger'), backgroundColor: Colors.orange),
+            const SnackBar(content: Text('Warning sent successfully'), backgroundColor: Colors.orange),
           );
         }
       } else {
@@ -200,9 +204,9 @@ class _ComplaintDetailsPageState extends State<ComplaintDetailsPage> {
     }
   }
 
-  Future<void> _banPassenger({required bool permanent}) async {
-    final passengerId = getPassengerId();
-    if (passengerId == null) {
+  Future<void> _banUser({required bool permanent}) async {
+    final accusedId = getAccusedId();
+    if (accusedId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Cannot ban for this complaint type')),
       );
@@ -220,7 +224,7 @@ class _ComplaintDetailsPageState extends State<ComplaintDetailsPage> {
         },
         body: jsonEncode({
           'complaintId': widget.complaint['id'],
-          'passengerId': passengerId,
+          'passengerId': accusedId,
           'duration': permanent ? 'permanent' : 'temporary',
           'reason': _messageController.text.isEmpty ? 'Violation of platform rules' : _messageController.text,
         }),
@@ -257,7 +261,7 @@ class _ComplaintDetailsPageState extends State<ComplaintDetailsPage> {
   }
 
   void _showWarningDialog() {
-    if (getPassengerId() == null) {
+    if (getAccusedId() == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Cannot send warning for this complaint type')),
       );
@@ -272,7 +276,7 @@ class _ComplaintDetailsPageState extends State<ComplaintDetailsPage> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Passenger: ${getPassengerName()}'),
+            Text('To: ${getAccusedName()}'),
             const SizedBox(height: 12),
             TextField(
               controller: _messageController,
@@ -300,7 +304,7 @@ class _ComplaintDetailsPageState extends State<ComplaintDetailsPage> {
   }
 
   void _showBanDialog({required bool permanent}) {
-    if (getPassengerId() == null) {
+    if (getAccusedId() == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Cannot ban for this complaint type')),
       );
@@ -315,7 +319,7 @@ class _ComplaintDetailsPageState extends State<ComplaintDetailsPage> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Passenger: ${getPassengerName()}'),
+            Text('To: ${getAccusedName()}'),
             const SizedBox(height: 12),
             TextField(
               controller: _messageController,
@@ -333,7 +337,7 @@ class _ComplaintDetailsPageState extends State<ComplaintDetailsPage> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () => _banPassenger(permanent: permanent),
+            onPressed: () => _banUser(permanent: permanent),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: Text(permanent ? 'Permanent Ban' : 'Ban for 7 days'),
           ),

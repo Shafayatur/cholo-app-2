@@ -29,6 +29,7 @@ exports.fileComplaint = async (req, res) => {
             data: {
                 driverId: Number(driverId),
                 passengerId: Number(passengerId),
+                complainantId: Number(driverId),
                 rideId: Number(rideId),
                 title: `Complaint against passenger`,
                 description: description,
@@ -125,17 +126,20 @@ exports.updateComplaintStatus = async (req, res) => {
             },
             include: {
                 driver: { select: { id: true, name: true, email: true } },
-                passenger: { select: { name: true, email: true } },
+                passenger: { select: { id: true, name: true, email: true } },
+                complainant: { select: { id: true, name: true } },
             },
         });
 
-        // Notify Driver
-        await createNotification(
-            complaint.driver.id,
-            "Complaint Update",
-            `Your complaint against ${complaint.passenger.name} has been marked as ${status.toLowerCase()}.`,
-            status === "RESOLVED" ? "SUCCESS" : "INFO"
-        );
+        // Notify Complainant
+        if (complaint.complainant) {
+            await createNotification(
+                complaint.complainant.id,
+                "Complaint Update",
+                `Your complaint has been marked as ${status.toLowerCase()}.`,
+                status === "RESOLVED" ? "SUCCESS" : "INFO"
+            );
+        }
 
         return res.json({
             message: `Complaint ${status.toLowerCase()} successfully`,
@@ -149,7 +153,7 @@ exports.updateComplaintStatus = async (req, res) => {
 
 // NEW METHOD: Send warning to passenger
 exports.sendWarning = async (req, res) => {
-    const { complaintId, passengerId, message } = req.body;
+    const { complaintId, userId, message } = req.body; // Changed passengerId to userId
 
     // Extract adminId from Authorization header
     const authHeader = req.headers.authorization;
@@ -162,16 +166,16 @@ exports.sendWarning = async (req, res) => {
         // Create warning record
         const warning = await prisma.warning.create({
             data: {
-                passengerId: Number(passengerId),
+                userId: Number(userId),
                 complaintId: Number(complaintId),
                 message: message,
                 issuedBy: Number(adminId),
             },
         });
 
-        // Increment passenger's warning count
-        await prisma.user.update({
-            where: { id: Number(passengerId) },
+        // Increment user's warning count
+        const updatedUser = await prisma.user.update({
+            where: { id: Number(userId) },
             data: { warningCount: { increment: 1 } },
         });
 
@@ -180,30 +184,32 @@ exports.sendWarning = async (req, res) => {
             where: { id: Number(complaintId) },
             data: { status: "REVIEWED" },
             include: {
-                driver: { select: { id: true } },
-                passenger: { select: { name: true } }
+                complainant: { select: { id: true, name: true } },
             }
         });
 
-        // Notify Passenger
+        // Notify the Accused
         await createNotification(
-            passengerId,
+            userId,
             "Official Warning",
             `You have received an official warning: ${message}`,
             "WARNING"
         );
 
-        // Notify Driver
-        await createNotification(
-            updatedComplaint.driver.id,
-            "Complaint Reviewed",
-            `Your complaint against ${updatedComplaint.passenger.name} has been reviewed and a warning has been issued.`,
-            "SUCCESS"
-        );
+        // Notify the Complainant
+        if (updatedComplaint.complainant) {
+            await createNotification(
+                updatedComplaint.complainant.id,
+                "Complaint Reviewed",
+                `Your complaint has been reviewed and a warning has been issued to the other party.`,
+                "SUCCESS"
+            );
+        }
 
         return res.json({
             message: "Warning sent successfully",
             warning: warning,
+            userRole: updatedUser.role
         });
     } catch (err) {
         console.error(err);
@@ -299,7 +305,7 @@ exports.getPassengerHistory = async (req, res) => {
         });
 
         const warnings = await prisma.warning.findMany({
-            where: { passengerId: passengerId },
+            where: { userId: passengerId },
             include: { complaint: true },
         });
 
@@ -324,6 +330,7 @@ exports.filePassengerToDriverComplaint = async (req, res) => {
             data: {
                 driverId: Number(driverId),
                 passengerId: Number(passengerId),
+                complainantId: Number(passengerId),
                 rideId: Number(rideId),
                 title: `Passenger complaint against driver`,
                 description: description,
@@ -365,6 +372,7 @@ exports.filePassengerToPassengerComplaint = async (req, res) => {
             data: {
                 driverId: null,
                 passengerId: Number(accusedId),
+                complainantId: Number(complainantId),
                 rideId: Number(rideId),
                 title: `Passenger complaint against passenger`,
                 description: description,
