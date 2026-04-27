@@ -277,11 +277,12 @@ class _PassengerRideDetailsState extends State<PassengerRideDetails> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              title: const Text('Report Issue (After Ride)'),
+              title: const Text('Report Issue After Ride'),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Seat Selection
                     const Text(
                       'Select Seat Number',
                       style: TextStyle(fontWeight: FontWeight.bold),
@@ -317,36 +318,143 @@ class _PassengerRideDetailsState extends State<PassengerRideDetails> {
                         ),
                       ),
                     const SizedBox(height: 16),
+                    
+                    // Time Selection
                     const Text(
                       'When did this happen?',
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 8),
-                    ListTile(
-                      tileColor: Colors.grey.shade50,
-                      shape: RoundedRectangleBorder(
+                    
+                    // Time Range Presets
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        children: [
+                          // Preset buttons
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildTimePresetButton(
+                                  'Last 15 min',
+                                  DateTime.now().subtract(const Duration(minutes: 15)),
+                                  DateTime.now(),
+                                  setDialogState,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: _buildTimePresetButton(
+                                  'Last 30 min',
+                                  DateTime.now().subtract(const Duration(minutes: 30)),
+                                  DateTime.now(),
+                                  setDialogState,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildTimePresetButton(
+                                  'Last 1 hour',
+                                  DateTime.now().subtract(const Duration(hours: 1)),
+                                  DateTime.now(),
+                                  setDialogState,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: _buildTimePresetButton(
+                                  'Last 2 hours',
+                                  DateTime.now().subtract(const Duration(hours: 2)),
+                                  DateTime.now(),
+                                  setDialogState,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          const Divider(),
+                          const SizedBox(height: 8),
+                          
+                          // Custom time range picker (Selecting From and To separately)
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('From:', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                              const SizedBox(height: 4),
+                              _buildDateTimePickerButton(
+                                context,
+                                _selectedTimeRange!.start,
+                                (newDateTime) {
+                                  setDialogState(() {
+                                    _selectedTimeRange = DateTimeRange(
+                                      start: newDateTime,
+                                      end: _selectedTimeRange!.end.isBefore(newDateTime) 
+                                          ? newDateTime.add(const Duration(minutes: 30)) 
+                                          : _selectedTimeRange!.end,
+                                    );
+                                  });
+                                },
+                              ),
+                              const SizedBox(height: 12),
+                              const Text('To:', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                              const SizedBox(height: 4),
+                              _buildDateTimePickerButton(
+                                context,
+                                _selectedTimeRange!.end,
+                                (newDateTime) {
+                                  if (newDateTime.isBefore(_selectedTimeRange!.start)) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('End time must be after start time')),
+                                    );
+                                    return;
+                                  }
+                                  setDialogState(() {
+                                    _selectedTimeRange = DateTimeRange(
+                                      start: _selectedTimeRange!.start,
+                                      end: newDateTime,
+                                    );
+                                  });
+                                },
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    
+                    // Display selected time range
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      leading: const Icon(Icons.access_time),
-                      title: Text(
-                        '${_formatTime(_selectedTimeRange!.start)} - ${_formatTime(_selectedTimeRange!.end)}',
+                      child: Row(
+                        children: [
+                          Icon(Icons.access_time, size: 16, color: Colors.blue.shade700),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Selected: ${_formatDateTime(_selectedTimeRange!.start)} - ${_formatDateTime(_selectedTimeRange!.end)}',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.blue.shade700),
+                            ),
+                          ),
+                        ],
                       ),
-                      trailing: const Icon(Icons.edit),
-                      onTap: () async {
-                        final picked = await showDateRangePicker(
-                          context: context,
-                          firstDate: DateTime.parse(widget.ride['departureTime']),
-                          lastDate: DateTime.now(),
-                          initialDateRange: _selectedTimeRange,
-                        );
-                        if (picked != null) {
-                          setDialogState(() {
-                            _selectedTimeRange = picked;
-                          });
-                        }
-                      },
                     ),
+                    
                     const SizedBox(height: 16),
+                    
+                    // Severity
                     const Text(
                       'Severity',
                       style: TextStyle(fontWeight: FontWeight.bold),
@@ -374,6 +482,8 @@ class _PassengerRideDetailsState extends State<PassengerRideDetails> {
                       ],
                     ),
                     const SizedBox(height: 16),
+                    
+                    // Description
                     const Text(
                       'Describe the issue',
                       style: TextStyle(fontWeight: FontWeight.bold),
@@ -410,6 +520,56 @@ class _PassengerRideDetailsState extends State<PassengerRideDetails> {
           },
         );
       },
+    );
+  }
+
+  // Helper method for time preset buttons
+  Widget _buildTimePresetButton(String label, DateTime start, DateTime end, Function(void Function()) setState) {
+    final isSelected = _selectedTimeRange?.start == start && _selectedTimeRange?.end == end;
+    return ElevatedButton(
+      onPressed: () {
+        setState(() {
+          _selectedTimeRange = DateTimeRange(start: start, end: end);
+        });
+      },
+      style: ElevatedButton.styleFrom(
+        backgroundColor: isSelected ? Colors.blue.shade100 : Colors.grey.shade200,
+        foregroundColor: isSelected ? Colors.blue.shade800 : Colors.black87,
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+      child: Text(label, style: const TextStyle(fontSize: 12)),
+    );
+  }
+
+  // Helper method for picking date and time together
+  Widget _buildDateTimePickerButton(BuildContext context, DateTime current, Function(DateTime) onPicked) {
+    return OutlinedButton.icon(
+      onPressed: () async {
+        final date = await showDatePicker(
+          context: context,
+          initialDate: current,
+          firstDate: DateTime.now().subtract(const Duration(days: 30)),
+          lastDate: DateTime.now(),
+        );
+        if (date == null) return;
+
+        final time = await showTimePicker(
+          context: context,
+          initialTime: TimeOfDay.fromDateTime(current),
+        );
+        if (time == null) return;
+
+        onPicked(DateTime(date.year, date.month, date.day, time.hour, time.minute));
+      },
+      icon: const Icon(Icons.calendar_today, size: 16),
+      label: Text(_formatDateTime(current)),
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size(double.infinity, 45),
+        alignment: Alignment.centerLeft,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
     );
   }
 
@@ -510,7 +670,11 @@ class _PassengerRideDetailsState extends State<PassengerRideDetails> {
   }
 
   String _formatTime(DateTime time) {
-    return '${time.hour}:${time.minute.toString().padLeft(2, '0')}';
+    return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+  }
+
+  String _formatDateTime(DateTime time) {
+    return '${time.day}/${time.month} ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
   }
 
   // Report Driver
