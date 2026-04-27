@@ -261,7 +261,7 @@ class _DriverPanelState extends State<DriverPanel> {
         Uri.parse('${backendUrl}/api/rides'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
-          'driverId': 1, // TODO: Get from auth
+          'driverId': Session.userId,
           'origin': originController.text,
           'destination': destinationController.text,
           'originLat': startLocation!.latitude,
