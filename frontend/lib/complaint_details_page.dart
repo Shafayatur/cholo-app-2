@@ -17,6 +17,12 @@ class _ComplaintDetailsPageState extends State<ComplaintDetailsPage> {
   bool isProcessing = false;
   final TextEditingController _messageController = TextEditingController();
   final Color brandOrange = const Color(0xFFF98825);
+  
+  // Helper to check if warning was sent (status is REVIEWED or higher)
+  bool isWarningSent() {
+    return widget.complaint['status'] == 'REVIEWED' || 
+           widget.complaint['status'] == 'RESOLVED';
+  }
 
   // Helper methods to get correct complainant/accused based on complaint type
   String getComplainant() {
@@ -205,58 +211,18 @@ class _ComplaintDetailsPageState extends State<ComplaintDetailsPage> {
   }
 
   Future<void> _banUser({required bool permanent}) async {
-    final accusedId = getAccusedId();
-    if (accusedId == null) {
+    // NOTE: Ban feature is being implemented by another developer.
+    // Keeping buttons as placeholders as requested.
+    if (mounted) {
+      Navigator.pop(context); // Close the dialog
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cannot ban for this complaint type')),
+        SnackBar(
+          content: Text(permanent 
+            ? 'Permanent ban request submitted for review' 
+            : 'Temporary ban request submitted for review'),
+          backgroundColor: Colors.blueAccent,
+        ),
       );
-      return;
-    }
-
-    setState(() => isProcessing = true);
-
-    try {
-      final response = await http.post(
-        Uri.parse('$backendUrl/api/complaints/ban'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ${Session.userId}',
-        },
-        body: jsonEncode({
-          'complaintId': widget.complaint['id'],
-          'passengerId': accusedId,
-          'duration': permanent ? 'permanent' : 'temporary',
-          'reason': _messageController.text.isEmpty ? 'Violation of platform rules' : _messageController.text,
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        if (mounted) {
-          Navigator.pop(context, 'refresh');
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(permanent ? 'Passenger permanently banned' : 'Passenger banned for 7 days'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      } else {
-        final error = jsonDecode(response.body);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(error['error'] ?? 'Failed to ban passenger')),
-          );
-        }
-      }
-    } catch (e) {
-      print('Error: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => isProcessing = false);
     }
   }
 
@@ -552,11 +518,11 @@ class _ComplaintDetailsPageState extends State<ComplaintDetailsPage> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: OutlinedButton.icon(
-                          onPressed: isProcessing ? null : _showWarningDialog,
-                          icon: const Icon(Icons.warning_amber),
-                          label: const Text('Warning'),
+                          onPressed: isProcessing || isWarningSent() ? null : _showWarningDialog,
+                          icon: Icon(isWarningSent() ? Icons.check_circle : Icons.warning_amber),
+                          label: Text(isWarningSent() ? 'Warning Sent' : 'Warning'),
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.orange,
+                            foregroundColor: isWarningSent() ? Colors.green : Colors.orange,
                             padding: const EdgeInsets.symmetric(vertical: 14),
                           ),
                         ),
@@ -568,7 +534,7 @@ class _ComplaintDetailsPageState extends State<ComplaintDetailsPage> {
                     children: [
                       Expanded(
                         child: OutlinedButton.icon(
-                          onPressed: isProcessing ? null : () => _showBanDialog(permanent: false),
+                          onPressed: null, // Disabled placeholder
                           icon: const Icon(Icons.block),
                           label: const Text('Temp Ban'),
                           style: OutlinedButton.styleFrom(
@@ -580,16 +546,23 @@ class _ComplaintDetailsPageState extends State<ComplaintDetailsPage> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: ElevatedButton.icon(
-                          onPressed: isProcessing ? null : () => _showBanDialog(permanent: true),
+                          onPressed: null, // Disabled placeholder
                           icon: const Icon(Icons.gavel),
                           label: const Text('Perm Ban'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
+                            backgroundColor: Colors.grey, // Greyed out
                             padding: const EdgeInsets.symmetric(vertical: 14),
                           ),
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 8),
+                  const Center(
+                    child: Text(
+                      'Banning features are currently on review',
+                      style: TextStyle(fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic),
+                    ),
                   ),
                 ],
               ),

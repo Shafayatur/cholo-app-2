@@ -352,10 +352,10 @@ class _PassengerRideDetailsState extends State<PassengerRideDetails> {
                           ElevatedButton.icon(
                             onPressed: () => _showComplaintDialog(),
                             icon: const Icon(Icons.report_problem_outlined, size: 16),
-                                label: const Text('Report'),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: Colors.red,
-                                  side: const BorderSide(color: Colors.red),
+                            label: const Text('Report'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.red,
+                              side: const BorderSide(color: Colors.red),
                             ),
                           ),
                         ],

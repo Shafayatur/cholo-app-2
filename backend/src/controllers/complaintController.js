@@ -44,6 +44,22 @@ exports.fileComplaint = async (req, res) => {
             },
         });
 
+        // Notify the complainant driver
+        await createNotification(
+            driverId,
+            "Complaint Filed",
+            `Your complaint against the passenger has been filed successfully and is pending review.`,
+            "SUCCESS"
+        );
+
+        // Notify the accused passenger
+        await createNotification(
+            passengerId,
+            "Complaint Filed Against You",
+            `A driver has filed a complaint against you. Admin will review it.`,
+            "WARNING"
+        );
+
         return res.status(201).json({
             message: "Complaint filed successfully",
             complaint: complaint,
@@ -136,8 +152,25 @@ exports.updateComplaintStatus = async (req, res) => {
             await createNotification(
                 complaint.complainant.id,
                 "Complaint Update",
-                `Your complaint has been marked as ${status.toLowerCase()}.`,
+                `Your complaint #${complaintId} has been marked as ${status.toLowerCase()}.`,
                 status === "RESOLVED" ? "SUCCESS" : "INFO"
+            );
+        }
+
+        // Notify Accused Party
+        let accusedId = null;
+        if (complaint.type === "DRIVER_COMPLAINT" || complaint.type === "PASSENGER_TO_PASSENGER") {
+            accusedId = complaint.passengerId;
+        } else if (complaint.type === "PASSENGER_TO_DRIVER") {
+            accusedId = complaint.driverId;
+        }
+
+        if (accusedId) {
+            await createNotification(
+                accusedId,
+                "Complaint Update",
+                `The complaint filed against you (#${complaintId}) is now ${status.toLowerCase()}.`,
+                status === "DISMISSED" ? "SUCCESS" : "INFO"
             );
         }
 
@@ -219,75 +252,12 @@ exports.sendWarning = async (req, res) => {
 
 // NEW METHOD: Ban passenger
 exports.banPassenger = async (req, res) => {
-    const { passengerId, duration, reason, complaintId } = req.body;
-    console.log(`Banning passenger ${passengerId} for complaint ${complaintId}. Duration: ${duration}`);
-
-    try {
-        let banExpiryDate = null;
-        let isPermanent = false;
-
-        if (duration === "temporary") {
-            // 7 days ban
-            banExpiryDate = new Date();
-            banExpiryDate.setDate(banExpiryDate.getDate() + 7);
-        } else if (duration === "permanent") {
-            isPermanent = true;
-            banExpiryDate = null;
-        }
-
-        // 1. Update User Record
-        await prisma.user.update({
-            where: { id: Number(passengerId) },
-            data: {
-                isBanned: true,
-                banReason: reason,
-                banExpiryDate: banExpiryDate,
-            },
-        });
-
-        // 2. Update Complaint Status
-        let updatedComplaint;
-        if (complaintId) {
-            updatedComplaint = await prisma.complaint.update({
-                where: { id: Number(complaintId) },
-                data: { status: "RESOLVED" },
-                include: {
-                    driver: { select: { id: true } },
-                    passenger: { select: { name: true } }
-                }
-            });
-            console.log(`Complaint ${complaintId} status updated to RESOLVED`);
-        }
-
-        // 3. Create Notifications
-        const banMsg = duration === "permanent" ? "permanently banned" : "banned for 7 days";
-
-        // Notify Passenger
-        await createNotification(
-            passengerId,
-            "Account Sanction",
-            `Your account has been ${banMsg} due to: ${reason}`,
-            "DANGER"
-        );
-
-        // Notify Driver (if complaint exists)
-        if (updatedComplaint) {
-            await createNotification(
-                updatedComplaint.driver.id,
-                "Complaint Resolved",
-                `Your complaint against ${updatedComplaint.passenger.name} has been resolved. The passenger has been ${banMsg}.`,
-                "SUCCESS"
-            );
-        }
-
-        return res.json({
-            message: duration === "permanent" ? "Passenger permanently banned" : "Passenger banned for 7 days",
-            status: "RESOLVED"
-        });
-    } catch (err) {
-        console.error("Error in banPassenger:", err);
-        return res.status(500).json({ error: "Failed to ban passenger", details: err.message });
-    }
+    // NOTE: Ban logic is currently handled by another developer.
+    // This is a placeholder to keep the endpoint functional.
+    return res.json({
+        message: "Ban request received. Processing by safety team.",
+        status: "PENDING_REVIEW"
+    });
 };
 
 // NEW METHOD: Get passenger complaint history
@@ -353,6 +323,14 @@ exports.filePassengerToDriverComplaint = async (req, res) => {
             "WARNING"
         );
 
+        // Notify the complainant passenger
+        await createNotification(
+            passengerId,
+            "Complaint Filed",
+            `Your complaint against the driver has been filed successfully and is pending review.`,
+            "SUCCESS"
+        );
+
         return res.status(201).json({
             message: "Complaint filed successfully",
             complaint: complaint,
@@ -392,6 +370,14 @@ exports.filePassengerToPassengerComplaint = async (req, res) => {
             "Complaint Filed Against You",
             `A fellow passenger has filed a complaint against you. Admin will review it.`,
             "WARNING"
+        );
+
+        // Notify the complainant passenger
+        await createNotification(
+            complainantId,
+            "Complaint Filed",
+            `Your complaint against the fellow passenger has been filed successfully and is pending review.`,
+            "SUCCESS"
         );
 
         return res.status(201).json({

@@ -55,6 +55,41 @@ class _UserPanelState extends State<UserPanel> {
     }
   }
 
+  void _showNotifications() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Notifications'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: notifications.isEmpty
+              ? const Center(child: Text('No notifications'))
+              : ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: notifications.length,
+                  itemBuilder: (context, index) {
+                    final n = notifications[index];
+                    return ListTile(
+                      leading: Icon(
+                        n['type'] == 'WARNING' ? Icons.warning : 
+                        n['type'] == 'SUCCESS' ? Icons.check_circle : Icons.info,
+                        color: n['type'] == 'WARNING' ? Colors.orange : 
+                               n['type'] == 'SUCCESS' ? Colors.green : Colors.blue,
+                      ),
+                      title: Text(n['title'], style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                      subtitle: Text(n['message'], style: const TextStyle(fontSize: 12)),
+                      contentPadding: EdgeInsets.zero,
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final Color brandOrange = const Color(0xFFF98825);
@@ -71,6 +106,25 @@ class _UserPanelState extends State<UserPanel> {
         centerTitle: true,
         elevation: 0,
         actions: [
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.notifications, color: Colors.white),
+                onPressed: _showNotifications,
+              ),
+              if (notifications.any((n) => n['isRead'] == false))
+                Positioned(
+                  right: 12,
+                  top: 12,
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(6)),
+                    constraints: const BoxConstraints(minWidth: 12, minHeight: 12),
+                  ),
+                ),
+            ],
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: fetchData,
@@ -85,28 +139,6 @@ class _UserPanelState extends State<UserPanel> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Ban/Warning Alert
-                  if (userData != null && (userData!['totalWarnings'] > 0 || userData!['isBanned'] == true))
-                    _buildStatusAlert(),
-                  
-                  const SizedBox(height: 20),
-                  
-                  // Notifications Section
-                  if (notifications.isNotEmpty) ...[
-                    const Text(
-                      'Notifications',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 12),
-                    ...notifications.take(3).map((n) => _buildNotificationCard(n)),
-                    if (notifications.length > 3)
-                      TextButton(
-                        onPressed: () {}, // TODO: View all notifications
-                        child: const Text('View All Notifications'),
-                      ),
-                    const SizedBox(height: 20),
-                  ],
-
                   Image.asset('assets/cholo_logo.png', height: 60),
                   const SizedBox(height: 20),
 
@@ -137,48 +169,6 @@ class _UserPanelState extends State<UserPanel> {
     );
   }
 
-  Widget _buildStatusAlert() {
-    bool isBanned = userData?['isBanned'] ?? false;
-    int warnings = userData?['totalWarnings'] ?? 0;
-    
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isBanned ? Colors.red.shade50 : Colors.orange.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: isBanned ? Colors.red : Colors.orange),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            isBanned ? Icons.block : Icons.warning_amber_rounded,
-            color: isBanned ? Colors.red : Colors.orange,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  isBanned ? 'ACCOUNT BANNED' : 'ACCOUNT WARNING',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: isBanned ? Colors.red : Colors.orange.shade900,
-                  ),
-                ),
-                Text(
-                  isBanned 
-                    ? 'Your account has been suspended due to violations.'
-                    : 'You have $warnings warning(s). Please follow platform rules.',
-                  style: const TextStyle(fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildNotificationCard(dynamic n) {
     IconData icon = Icons.info_outline;
