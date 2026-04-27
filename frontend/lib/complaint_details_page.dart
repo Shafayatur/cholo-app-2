@@ -32,7 +32,7 @@ class _ComplaintDetailsPageState extends State<ComplaintDetailsPage> {
       case 'PASSENGER_TO_DRIVER':
         return widget.complaint['passenger']?['name'] ?? 'Unknown Passenger';
       case 'PASSENGER_TO_PASSENGER':
-        return 'Passenger (Anonymous)';
+        return widget.complaint['complainant']?['name'] ?? widget.complaint['passenger']?['name'] ?? 'Unknown Passenger';
       default:
         return 'Unknown';
     }
@@ -211,10 +211,7 @@ class _ComplaintDetailsPageState extends State<ComplaintDetailsPage> {
   }
 
   Future<void> _banUser({required bool permanent}) async {
-    // NOTE: Ban feature is being implemented by another developer.
-    // Keeping buttons as placeholders as requested.
     if (mounted) {
-      Navigator.pop(context); // Close the dialog
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(permanent 
@@ -285,7 +282,7 @@ class _ComplaintDetailsPageState extends State<ComplaintDetailsPage> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('To: ${getAccusedName()}'),
+            Text('User: ${getAccusedName()}'),
             const SizedBox(height: 12),
             TextField(
               controller: _messageController,
@@ -528,41 +525,6 @@ class _ComplaintDetailsPageState extends State<ComplaintDetailsPage> {
                         ),
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: null, // Disabled placeholder
-                          icon: const Icon(Icons.block),
-                          label: const Text('Temp Ban'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.orange.shade800,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: null, // Disabled placeholder
-                          icon: const Icon(Icons.gavel),
-                          label: const Text('Perm Ban'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.grey, // Greyed out
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  const Center(
-                    child: Text(
-                      'Banning features are currently on review',
-                      style: TextStyle(fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic),
-                    ),
                   ),
                 ],
               ),

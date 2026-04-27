@@ -18,8 +18,16 @@ class _PassengerRideDetailsState extends State<PassengerRideDetails> {
   dynamic driver;
   bool isLoading = true;
   String? mySeatNumber;
-  
+  int? totalSeats;
+
   final Color brandOrange = const Color(0xFFF98825);
+
+  // For delayed reporting
+  int? _selectedSeatForReport;
+  DateTimeRange? _selectedTimeRange;
+  String _reportDescription = '';
+  String _severity = 'MEDIUM';
+  bool _isSubmitting = false;
 
   @override
   void initState() {
@@ -29,54 +37,55 @@ class _PassengerRideDetailsState extends State<PassengerRideDetails> {
 
   Future<void> fetchRideDetails() async {
     setState(() => isLoading = true);
-    
+
     try {
       final response = await http.get(
         Uri.parse('$backendUrl/seat-booking/${widget.ride['id']}/seats'),
         headers: {'Authorization': 'Bearer ${Session.userId}'},
       );
-      
+
       print('Fetch ride details status: ${response.statusCode}');
-      
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        
-        List<dynamic> allPassengers = [];
+
+        List<dynamic> activePassengers = [];
         String? mySeat;
-        
+        int seats = data['totalSeats'] ?? 0;
+
         for (var seat in data['seats']) {
           if (seat['passenger'] != null && seat['state'] != 'AVAILABLE') {
             final passenger = seat['passenger'];
             final isMe = passenger['id'] == Session.userId;
-            
+
             if (isMe) {
               mySeat = seat['seatNo'].toString();
             } else {
-              allPassengers.add({
-                'id': passenger['id'],
-                'name': passenger['name'],
-                'email': passenger['email'],
-                'seatNo': seat['seatNo'],
-                'fare': seat['fare'],
-              });
+              // Only store seat number for display (privacy)
+              if (seat['paidAt'] == null) {
+                activePassengers.add({
+                  'seatNo': seat['seatNo'],
+                });
+              }
             }
           }
         }
-        
+
         final driverData = {
           'id': widget.ride['driverId'],
           'name': widget.ride['driver']?['name'] ?? 'Driver',
           'email': widget.ride['driver']?['email'] ?? 'N/A',
         };
-        
+
         setState(() {
-          fellowPassengers = allPassengers;
+          fellowPassengers = activePassengers;
+          totalSeats = seats;
           driver = driverData;
           mySeatNumber = mySeat;
           isLoading = false;
         });
-        
-        print('Found ${fellowPassengers.length} fellow passengers');
+
+        print('Found ${activePassengers.length} active passengers');
       } else {
         setState(() => isLoading = false);
       }
@@ -86,181 +95,143 @@ class _PassengerRideDetailsState extends State<PassengerRideDetails> {
     }
   }
 
-  // Simple complaint dialog without complex StatefulBuilder
-  void _showComplaintDialog({int? passengerId, String? passengerName, int? seatNo}) {
-    final TextEditingController complaintController = TextEditingController();
-    String complaintType = passengerId != null ? 'PASSENGER' : 'DRIVER';
+  // ============ IMMEDIATE REPORTING (During Ride) ============
+  void _showImmediateReportDialog({required int seatNo}) {
+    final TextEditingController descriptionController = TextEditingController();
     String severity = 'MEDIUM';
-    bool isSubmitting = false;
-    
-    // If passenger is specified, we're complaining against passenger
-    final targetPassengerId = passengerId;
-    final targetPassengerName = passengerName;
-    
+
     showDialog(
       context: context,
-      barrierDismissible: !isSubmitting,
-      builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          title: Text(
-            complaintType == 'PASSENGER' 
-              ? 'Report Passenger: $targetPassengerName'
-              : 'Report Driver'
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Severity Selection
-                const Text(
-                  'Severity',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                Row(
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text('Report Passenger in Seat $seatNo'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Expanded(
-                      child: _buildSeverityChip('LOW', 'Low', severity, (value) {
-                        severity = value;
-                        (dialogContext as Element).markNeedsBuild();
-                      }),
+                    const Text(
+                      'Severity',
+                      style: TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _buildSeverityChip('MEDIUM', 'Medium', severity, (value) {
-                        severity = value;
-                        (dialogContext as Element).markNeedsBuild();
-                      }),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildSeverityChip('LOW', 'Low', severity, (value) {
+                            setDialogState(() => severity = value);
+                          }),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _buildSeverityChip('MEDIUM', 'Medium', severity, (value) {
+                            setDialogState(() => severity = value);
+                          }),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _buildSeverityChip('HIGH', 'High', severity, (value) {
+                            setDialogState(() => severity = value);
+                          }),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _buildSeverityChip('HIGH', 'High', severity, (value) {
-                        severity = value;
-                        (dialogContext as Element).markNeedsBuild();
-                      }),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Describe the issue',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: descriptionController,
+                      maxLines: 4,
+                      decoration: const InputDecoration(
+                        hintText: 'What happened? (time, location, details...)',
+                        border: OutlineInputBorder(),
+                      ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
-                
-                // Description
-                const Text(
-                  'Describe the issue',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel'),
                 ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: complaintController,
-                  maxLines: 4,
-                  decoration: const InputDecoration(
-                    hintText: 'Please describe what happened...',
-                    border: OutlineInputBorder(),
-                  ),
+                ElevatedButton(
+                  onPressed: () async {
+                    if (descriptionController.text.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please describe the issue')),
+                      );
+                      return;
+                    }
+                    Navigator.pop(dialogContext);
+                    await _submitImmediateComplaint(
+                      seatNo: seatNo,
+                      description: descriptionController.text,
+                      severity: severity,
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                  child: const Text('Report'),
                 ),
               ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: isSubmitting ? null : () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: isSubmitting
-                  ? null
-                  : () async {
-                      if (complaintController.text.isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Please describe the issue')),
-                        );
-                        return;
-                      }
-                      
-                      setState(() => isSubmitting = true);
-                      Navigator.pop(dialogContext); // Close dialog
-                      
-                      await _submitComplaint(
-                        type: complaintType,
-                        accusedId: complaintType == 'PASSENGER' ? targetPassengerId : widget.ride['driverId'],
-                        description: complaintController.text,
-                        severity: severity,
-                      );
-                    },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-              ),
-              child: isSubmitting
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                    )
-                  : const Text('Submit'),
-            ),
-          ],
+            );
+          },
         );
       },
     );
   }
-  
-  Widget _buildSeverityChip(String value, String label, String selectedValue, Function(String) onSelected) {
-    return FilterChip(
-      label: Text(label),
-      selected: selectedValue == value,
-      onSelected: (selected) {
-        if (selected) onSelected(value);
-      },
-      backgroundColor: Colors.grey.shade200,
-      selectedColor: value == 'LOW' 
-          ? Colors.green.shade200
-          : value == 'MEDIUM' 
-              ? Colors.orange.shade200
-              : Colors.red.shade200,
-    );
-  }
 
-  Future<void> _submitComplaint({
-    required String type,
-    required int? accusedId,
+  Future<void> _submitImmediateComplaint({
+    required int seatNo,
     required String description,
     required String severity,
   }) async {
+    setState(() => _isSubmitting = true);
+
     try {
-      final endpoint = type == 'PASSENGER'
-          ? '$backendUrl/api/complaints/passenger-to-passenger'
-          : '$backendUrl/api/complaints/passenger-to-driver';
-      
-      final body = type == 'PASSENGER'
-          ? {
-              'complainantId': Session.userId,
-              'accusedId': accusedId,
-              'rideId': widget.ride['id'],
-              'description': description,
-              'severity': severity,
-            }
-          : {
-              'passengerId': Session.userId,
-              'driverId': accusedId,
-              'rideId': widget.ride['id'],
-              'description': description,
-              'severity': severity,
-            };
-      
-      print('Submitting complaint to: $endpoint');
-      print('Body: $body');
-      
-      final response = await http.post(
-        Uri.parse(endpoint),
+      final identifyResponse = await http.post(
+        Uri.parse('$backendUrl/api/complaints/identify-passenger'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer ${Session.userId}',
         },
-        body: jsonEncode(body),
+        body: jsonEncode({
+          'rideId': widget.ride['id'],
+          'seatNo': seatNo,
+        }),
       );
-      
-      print('Response status: ${response.statusCode}');
-      print('Response body: ${response.body}');
-      
+
+      if (identifyResponse.statusCode != 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not identify passenger in that seat')),
+        );
+        return;
+      }
+
+      final identifyData = jsonDecode(identifyResponse.body);
+      final accusedId = identifyData['passenger']['id'];
+
+      final response = await http.post(
+        Uri.parse('$backendUrl/api/complaints/passenger-to-passenger'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${Session.userId}',
+        },
+        body: jsonEncode({
+          'complainantId': Session.userId,
+          'accusedId': accusedId,
+          'rideId': widget.ride['id'],
+          'description': description,
+          'severity': severity,
+          'seatNo': seatNo,
+          'reportType': 'IMMEDIATE',
+        }),
+      );
+
       if (response.statusCode == 201) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -279,12 +250,406 @@ class _PassengerRideDetailsState extends State<PassengerRideDetails> {
         }
       }
     } catch (e) {
-      print('Error filing complaint: $e');
+      print('Error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $e')),
         );
       }
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  // ============ DELAYED REPORTING (After Ride) ============
+  void _showDelayedReportDialog() {
+    _selectedSeatForReport = null;
+    _selectedTimeRange = DateTimeRange(
+      start: DateTime.now().subtract(const Duration(minutes: 30)),
+      end: DateTime.now(),
+    );
+    _reportDescription = '';
+    _severity = 'MEDIUM';
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Report Issue (After Ride)'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Select Seat Number',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      children: List.generate(totalSeats ?? 4, (index) {
+                        final seatNo = index + 1;
+                        final isMySeat = seatNo.toString() == mySeatNumber;
+                        return FilterChip(
+                          label: Text('Seat $seatNo'),
+                          selected: _selectedSeatForReport == seatNo,
+                          onSelected: isMySeat
+                              ? null
+                              : (selected) {
+                                  setDialogState(() {
+                                    _selectedSeatForReport = selected ? seatNo : null;
+                                  });
+                                },
+                          selectedColor: Colors.red.shade100,
+                          backgroundColor: Colors.grey.shade200,
+                          disabledColor: Colors.grey.shade300,
+                        );
+                      }),
+                    ),
+                    if (_selectedSeatForReport == null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          'Select a seat number (cannot report yourself)',
+                          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                        ),
+                      ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'When did this happen?',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    ListTile(
+                      tileColor: Colors.grey.shade50,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      leading: const Icon(Icons.access_time),
+                      title: Text(
+                        '${_formatTime(_selectedTimeRange!.start)} - ${_formatTime(_selectedTimeRange!.end)}',
+                      ),
+                      trailing: const Icon(Icons.edit),
+                      onTap: () async {
+                        final picked = await showDateRangePicker(
+                          context: context,
+                          firstDate: DateTime.parse(widget.ride['departureTime']),
+                          lastDate: DateTime.now(),
+                          initialDateRange: _selectedTimeRange,
+                        );
+                        if (picked != null) {
+                          setDialogState(() {
+                            _selectedTimeRange = picked;
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Severity',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildSeverityChip('LOW', 'Low', _severity, (value) {
+                            setDialogState(() => _severity = value);
+                          }),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _buildSeverityChip('MEDIUM', 'Medium', _severity, (value) {
+                            setDialogState(() => _severity = value);
+                          }),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _buildSeverityChip('HIGH', 'High', _severity, (value) {
+                            setDialogState(() => _severity = value);
+                          }),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Describe the issue',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      maxLines: 4,
+                      decoration: const InputDecoration(
+                        hintText: 'What happened? (be specific)',
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (value) => _reportDescription = value,
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: _selectedSeatForReport == null || _reportDescription.isEmpty
+                      ? null
+                      : () async {
+                          Navigator.pop(dialogContext);
+                          await _submitDelayedComplaint();
+                        },
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                  child: const Text('Report'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _submitDelayedComplaint() async {
+    if (_selectedSeatForReport == null || _selectedTimeRange == null) return;
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      final identifyResponse = await http.post(
+        Uri.parse('$backendUrl/api/complaints/identify-passenger-by-time'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${Session.userId}',
+        },
+        body: jsonEncode({
+          'rideId': widget.ride['id'],
+          'seatNo': _selectedSeatForReport,
+          'startTime': _selectedTimeRange!.start.toIso8601String(),
+          'endTime': _selectedTimeRange!.end.toIso8601String(),
+        }),
+      );
+
+      if (identifyResponse.statusCode != 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not identify passenger at that time')),
+        );
+        return;
+      }
+
+      final identifyData = jsonDecode(identifyResponse.body);
+      final accusedId = identifyData['passenger']['id'];
+
+      final response = await http.post(
+        Uri.parse('$backendUrl/api/complaints/passenger-to-passenger'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${Session.userId}',
+        },
+        body: jsonEncode({
+          'complainantId': Session.userId,
+          'accusedId': accusedId,
+          'rideId': widget.ride['id'],
+          'description': _reportDescription,
+          'severity': _severity,
+          'seatNo': _selectedSeatForReport,
+          'timeRange': {
+            'start': _selectedTimeRange!.start.toIso8601String(),
+            'end': _selectedTimeRange!.end.toIso8601String(),
+          },
+          'reportType': 'DELAYED',
+        }),
+      );
+
+      if (response.statusCode == 201) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Complaint filed successfully'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        final error = jsonDecode(response.body);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(error['error'] ?? 'Failed to file complaint')),
+          );
+        }
+      }
+    } catch (e) {
+      print('Error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  Widget _buildSeverityChip(String value, String label, String selectedValue, Function(String) onSelected) {
+    return FilterChip(
+      label: Text(label),
+      selected: selectedValue == value,
+      onSelected: (selected) {
+        if (selected) onSelected(value);
+      },
+      backgroundColor: Colors.grey.shade200,
+      selectedColor: value == 'LOW'
+          ? Colors.green.shade200
+          : value == 'MEDIUM'
+              ? Colors.orange.shade200
+              : Colors.red.shade200,
+    );
+  }
+
+  String _formatTime(DateTime time) {
+    return '${time.hour}:${time.minute.toString().padLeft(2, '0')}';
+  }
+
+  // Report Driver
+  void _reportDriver() {
+    final TextEditingController descriptionController = TextEditingController();
+    String severity = 'MEDIUM';
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Report Driver'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Severity',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildSeverityChip('LOW', 'Low', severity, (value) {
+                            setDialogState(() => severity = value);
+                          }),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _buildSeverityChip('MEDIUM', 'Medium', severity, (value) {
+                            setDialogState(() => severity = value);
+                          }),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _buildSeverityChip('HIGH', 'High', severity, (value) {
+                            setDialogState(() => severity = value);
+                          }),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Describe the issue',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: descriptionController,
+                      maxLines: 4,
+                      decoration: const InputDecoration(
+                        hintText: 'What happened?',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    if (descriptionController.text.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please describe the issue')),
+                      );
+                      return;
+                    }
+                    Navigator.pop(dialogContext);
+                    await _submitDriverComplaint(
+                      description: descriptionController.text,
+                      severity: severity,
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                  child: const Text('Report'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _submitDriverComplaint({
+    required String description,
+    required String severity,
+  }) async {
+    setState(() => _isSubmitting = true);
+
+    try {
+      final response = await http.post(
+        Uri.parse('$backendUrl/api/complaints/passenger-to-driver'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${Session.userId}',
+        },
+        body: jsonEncode({
+          'passengerId': Session.userId,
+          'driverId': widget.ride['driverId'],
+          'rideId': widget.ride['id'],
+          'description': description,
+          'severity': severity,
+        }),
+      );
+
+      if (response.statusCode == 201) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Complaint filed successfully'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        final error = jsonDecode(response.body);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(error['error'] ?? 'Failed to file complaint')),
+          );
+        }
+      }
+    } catch (e) {
+      print('Error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
     }
   }
 
@@ -331,9 +696,9 @@ class _PassengerRideDetailsState extends State<PassengerRideDetails> {
                       ),
                     ),
                   ),
-                  
+
                   const SizedBox(height: 16),
-                  
+
                   // Driver Info Card with Report Button
                   Card(
                     child: Padding(
@@ -350,10 +715,10 @@ class _PassengerRideDetailsState extends State<PassengerRideDetails> {
                           _infoRow(Icons.email, 'Email', driver?['email'] ?? 'N/A'),
                           const SizedBox(height: 8),
                           ElevatedButton.icon(
-                            onPressed: () => _showComplaintDialog(),
+                            onPressed: _reportDriver,
                             icon: const Icon(Icons.report_problem_outlined, size: 16),
-                            label: const Text('Report'),
-                            style: OutlinedButton.styleFrom(
+                            label: const Text('Report Driver'),
+                            style: ElevatedButton.styleFrom(
                               foregroundColor: Colors.red,
                               side: const BorderSide(color: Colors.red),
                             ),
@@ -362,36 +727,64 @@ class _PassengerRideDetailsState extends State<PassengerRideDetails> {
                       ),
                     ),
                   ),
-                  
+
                   const SizedBox(height: 16),
-                  
-                  // Fellow Passengers Card
-                  if (fellowPassengers.isNotEmpty)
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Fellow Passengers',
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 8),
+
+                  // Fellow Passengers Card (Only Seat Numbers - Privacy Preserved)
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'Other Passengers',
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: brandOrange.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  '${fellowPassengers.length} active',
+                                  style: TextStyle(fontSize: 11, color: brandOrange),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          if (fellowPassengers.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Center(
+                                child: Text(
+                                  'No other passengers currently in this ride',
+                                  style: TextStyle(color: Colors.grey.shade500),
+                                ),
+                              ),
+                            )
+                          else
                             ...fellowPassengers.map((passenger) => ListTile(
                               leading: CircleAvatar(
                                 backgroundColor: brandOrange.withOpacity(0.1),
                                 child: Text(
-                                  passenger['name'][0].toUpperCase(),
-                                  style: TextStyle(color: brandOrange),
+                                  '${passenger['seatNo']}',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: brandOrange,
+                                  ),
                                 ),
                               ),
-                              title: Text(passenger['name']),
-                              subtitle: Text('Seat ${passenger['seatNo']}'),
+                              title: Text('Seat ${passenger['seatNo']}'),
+                              subtitle: const Text('Active passenger'),
                               trailing: OutlinedButton.icon(
-                                onPressed: () => _showComplaintDialog(
-                                  passengerId: passenger['id'],
-                                  passengerName: passenger['name'],
+                                onPressed: () => _showImmediateReportDialog(
                                   seatNo: passenger['seatNo'],
                                 ),
                                 icon: const Icon(Icons.report_problem_outlined, size: 16),
@@ -402,10 +795,31 @@ class _PassengerRideDetailsState extends State<PassengerRideDetails> {
                                 ),
                               ),
                             )),
-                          ],
-                        ),
+                          
+                          const Divider(height: 24),
+                          
+                          // Delayed Report Button
+                          ElevatedButton.icon(
+                            onPressed: _showDelayedReportDialog,
+                            icon: const Icon(Icons.access_time),
+                            label: const Text('Report Issue After Ride'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.grey.shade200,
+                              foregroundColor: Colors.black87,
+                              minimumSize: const Size(double.infinity, 45),
+                            ),
+                          ),
+                          
+                          const SizedBox(height: 8),
+                          Text(
+                            'Use this to report issues that happened earlier. Select seat number and time range.',
+                            style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
                       ),
                     ),
+                  ),
                 ],
               ),
             ),

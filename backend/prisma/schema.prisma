@@ -97,6 +97,7 @@ model Complaint {
   driver        User?     @relation("DriverComplaints", fields: [driverId], references: [id])
   passenger     User?     @relation("PassengerComplaints", fields: [passengerId], references: [id])
   ride          Ride      @relation(fields: [rideId], references: [id])
+  metadata      Json?
   warnings      Warning[]
 
   @@index([driverId])
