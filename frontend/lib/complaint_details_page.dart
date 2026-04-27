@@ -17,11 +17,18 @@ class _ComplaintDetailsPageState extends State<ComplaintDetailsPage> {
   bool isProcessing = false;
   final TextEditingController _messageController = TextEditingController();
   final Color brandOrange = const Color(0xFFF98825);
+  late String currentStatus;
+
+  @override
+  void initState() {
+    super.initState();
+    currentStatus = widget.complaint['status'] ?? 'PENDING';
+  }
   
   // Helper to check if warning was sent (status is REVIEWED or higher)
   bool isWarningSent() {
-    return widget.complaint['status'] == 'REVIEWED' || 
-           widget.complaint['status'] == 'RESOLVED';
+    return currentStatus == 'REVIEWED' || 
+           currentStatus == 'RESOLVED';
   }
 
   // Helper methods to get correct complainant/accused based on complaint type
@@ -145,7 +152,11 @@ class _ComplaintDetailsPageState extends State<ComplaintDetailsPage> {
 
       if (response.statusCode == 200) {
         if (mounted) {
-          Navigator.pop(context, 'refresh');
+          Navigator.pop(context); // Close the dialog
+          setState(() {
+            currentStatus = 'REVIEWED';
+            isProcessing = false;
+          });
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Warning sent successfully'), backgroundColor: Colors.orange),
           );
@@ -185,9 +196,15 @@ class _ComplaintDetailsPageState extends State<ComplaintDetailsPage> {
 
       if (response.statusCode == 200) {
         if (mounted) {
-          Navigator.pop(context, 'refresh');
+          setState(() {
+            currentStatus = status;
+            isProcessing = false;
+          });
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Complaint marked as ${status.toLowerCase()}')),
+            SnackBar(
+              content: Text('Status updated to $status'),
+              backgroundColor: status == 'RESOLVED' ? Colors.green : Colors.blue,
+            ),
           );
         }
       } else {
