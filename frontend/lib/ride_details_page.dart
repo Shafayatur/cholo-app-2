@@ -693,13 +693,6 @@ class _RideDetailsPageState extends State<RideDetailsPage> {
                 color: Colors.red.shade50,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: IconButton(
-                onPressed: () => _showComplaintDialog(passenger),
-                icon: Icon(Icons.report_problem_outlined, color: Colors.red.shade700, size: 20),
-                tooltip: 'File Complaint',
-                padding: const EdgeInsets.all(8),
-                constraints: const BoxConstraints(),
-              ),
             ),
           ],
         ),
